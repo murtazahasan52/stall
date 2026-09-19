@@ -10,6 +10,9 @@ Pick a type in the left panel, then drag on the grid.
 - **Stalls** — numbered and counted. Each new stall takes the next free number in
   its series (T1, T2, T3…). Types included: Regular (Y) 3 x 3, Ruby (L) 3 x 3,
   Premium (T) 6 x 6, Food stall (F) 3 x 3.
+  A stall appears the instant you press the mouse down — no waiting for the
+  release. Keep dragging from there and the row extends live, stall by stall,
+  and pulling back removes the ones you passed.
   A type carries its own sizes, one row per sub type — Premium ships with a 6 x 4
   and an 8 x 3. When a type has more than one, its sizes appear as chips under
   the type; click one to draw with it. One click on the grid then drops that
@@ -26,7 +29,12 @@ Pick a type in the left panel, then drag on the grid.
 
 Click anything to select it. Then:
 
-- **Move** — drag the selected item anywhere it fits.
+- **Several at once** — shift-click adds items to the selection, shift-drag on
+  empty grid draws a box around a block of them, Ctrl/Cmd+A takes everything.
+  Then drag any one of them and the whole group moves together, refusing a drop
+  where it would not fit. Type, facing, colour, layer, duplicate and delete all
+  apply to the whole selection, and arrow keys nudge it.
+- **Move** — drag any item to move it; it does not have to be selected first.
 - **Colour** — every stall in a category carries that category's colour, so the
   map reads by type at a glance. Recolour a category in its type dialog and all
   of its stalls follow. "One colour per category" under Layout snaps everything
@@ -45,9 +53,10 @@ Click anything to select it. Then:
   click places a stall inside the area instead.
 - **Resize** — drag the square handles on its edges and corners. A barricade has
   a handle at each end to change its length.
-- **Number** — click a stall and its number appears in a small box right above
-  it, already selected. Type the new number and press Enter. Escape puts the old
-  one back. The panel field stays in sync either way.
+- **Number** — the number is edited on the stall itself. Place a stall or click
+  an existing one and the number is selected ready to overtype; what you type
+  appears on the stall as you go. Enter keeps it, Escape puts the old one back.
+  The panel field stays in sync either way, and the box never blocks dragging.
 - **Size** — a dropdown in the panel switches the selected stall between its
   type's sub types. Position comes from dragging, not typed numbers.
 - **Layer** — Back / – / + / Front control the stacking order, so you can put a

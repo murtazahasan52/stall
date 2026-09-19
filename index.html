@@ -42,11 +42,11 @@
   .cwrap{position:relative;display:inline-block;line-height:0}
   canvas{display:block;touch-action:none;cursor:crosshair;border-radius:4px}
   #ov{position:absolute;left:0;top:0;pointer-events:none;background:transparent}
-  .inlineEdit{position:absolute;z-index:5;width:auto;min-width:66px;
-    font:650 13px "Segoe UI",Roboto,system-ui,sans-serif;text-align:center;
-    padding:4px 8px;border:1.5px solid var(--amber);border-radius:8px;
-    background:#FFFDF9;color:#070F21;box-shadow:0 3px 10px rgba(7,15,33,.22)}
-  .inlineEdit:focus{outline:2px solid var(--amber);outline-offset:1px}
+  .inlineEdit{position:absolute;z-index:5;pointer-events:none;
+    font-family:"Segoe UI",Roboto,system-ui,sans-serif;font-weight:600;
+    text-align:center;padding:0;margin:0;border:0;background:transparent;
+    caret-color:#070F21;border-radius:3px}
+  .inlineEdit:focus{outline:2px solid #070F21;outline-offset:-2px}
   h2{font-size:12px;font-weight:600;color:var(--muted);margin:0 0 8px;letter-spacing:.02em}
   .block{margin-bottom:20px}
   .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -154,7 +154,8 @@
     <div class="block" id="selBox" hidden>
       <h2>Selected</h2>
       <div class="sel">
-        <div class="row">
+        <p class="hint" id="multiInfo" style="margin-top:0" hidden></p>
+        <div class="row" id="labelRow">
           <label class="f">Name / number<input type="text" id="selLabel"></label>
         </div>
         <div class="row" style="margin-top:8px">
@@ -189,7 +190,7 @@
           <button id="dupBtn">Duplicate</button>
           <button class="danger" id="delBtn">Delete</button>
         </div>
-        <p class="hint">Drag it to move, drag its handles to resize. Arrow keys nudge, R turns the opening, Delete removes.</p>
+        <p class="hint">Drag to move, handles resize. Shift-click adds to the selection, shift-drag on empty grid selects a block, Ctrl/Cmd+A selects everything. Arrow keys nudge, R turns the opening, Delete removes.</p>
       </div>
     </div>
 
@@ -324,7 +325,7 @@
     items:[]
   };
   var state = JSON.parse(JSON.stringify(DEFAULTS));
-  var sel = null, drag = null, seq = 1;
+  var sel = null, picks = [], drag = null, seq = 1;
 
   var cv = document.getElementById("cv"), ctx = cv.getContext("2d");
   function $(id){ return document.getElementById(id); }
@@ -408,10 +409,11 @@
     if (kind === "barricade") return r.x>=0 && r.y>=0 && r.x<=state.cols && r.y<=state.rows;
     if (r.w<1 || r.h<1) return false;
     if (r.x<0 || r.y<0 || r.x+r.w>state.cols || r.y+r.h>state.rows) return false;
+    var skip = Array.isArray(ignoreId) ? ignoreId : (ignoreId ? [ignoreId] : []);
     var blockers = (kind === "stall") ? ["stall"] : ["zone","path"];
     for (var i=0;i<state.items.length;i++){
       var it = state.items[i];
-      if (it.id === ignoreId || it.orient) continue;
+      if (skip.indexOf(it.id) !== -1 || it.orient) continue;
       if (blockers.indexOf(kindOf(it)) === -1) continue;
       if (rectOverlap(r, it)) return false;
     }
@@ -469,11 +471,13 @@
       g.strokeStyle = "rgba(7,15,33,.55)"; g.lineWidth = 1.2;
       g.strokeRect(px+1.5, py+1.5, pw-3, ph-3);
       drawFace(g, it, px, py, pw, ph, textColor(fill));
-      var size = Math.min(Math.max(8, Math.min(pw,ph)*0.34), ph*0.5, pw*0.42);
-      g.fillStyle = textColor(fill);
-      g.font = "600 " + size.toFixed(1) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
-      g.textAlign = "center"; g.textBaseline = "middle";
-      g.fillText(it.label || "", px+pw/2, py+ph/2);
+      if (it.id !== editingId){
+        var size = Math.min(Math.max(8, Math.min(pw,ph)*0.34), ph*0.5, pw*0.42);
+        g.fillStyle = textColor(fill);
+        g.font = "600 " + size.toFixed(1) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
+        g.textAlign = "center"; g.textBaseline = "middle";
+        g.fillText(it.label || "", px+pw/2, py+ph/2);
+      }
     } else {
       var r = barRect(it, cs);
       g.fillStyle = "#FFFFFF"; g.fillRect(r.x, r.y, r.w, r.h);
@@ -558,7 +562,16 @@
   }
 
   function paintOverlay(g, cs){
-    if (sel && state.items.indexOf(sel) !== -1){
+    if (picks.length > 1){
+      g.setLineDash([5,3]); g.lineWidth = 2; g.strokeStyle = "#070F21";
+      picks.forEach(function(it){
+        if (state.items.indexOf(it) === -1) return;
+        var r = screenRect(it, cs);
+        g.strokeRect(r.x-2, r.y-2, r.w+4, r.h+4);
+      });
+      g.setLineDash([]);
+    }
+    else if (sel && state.items.indexOf(sel) !== -1){
       var rr = screenRect(sel, cs);
       g.strokeStyle = "#070F21"; g.lineWidth = 2.5; g.setLineDash([]);
       g.strokeRect(rr.x-2, rr.y-2, rr.w+4, rr.h+4);
@@ -569,6 +582,29 @@
         g.fillRect(p.x-k/2, p.y-k/2, k, k);
         g.strokeRect(p.x-k/2, p.y-k/2, k, k);
       });
+    }
+
+    if (drag && drag.mode === "marquee" && drag.preview){
+      var mr = drag.rectRaw;
+      g.fillStyle = "rgba(7,15,33,.07)";
+      g.fillRect(mr.x*cs, mr.y*cs, mr.w*cs, mr.h*cs);
+      g.setLineDash([6,4]); g.strokeStyle = "#070F21"; g.lineWidth = 1.5;
+      g.strokeRect(mr.x*cs, mr.y*cs, mr.w*cs, mr.h*cs);
+      g.setLineDash([]);
+      return;
+    }
+
+    if (drag && drag.mode === "move" && drag.preview && drag.previewItems){
+      g.setLineDash([6,4]); g.lineWidth = 2;
+      g.fillStyle = drag.ok ? "rgba(233,160,49,.28)" : "rgba(192,57,43,.25)";
+      g.strokeStyle = drag.ok ? "#B8740F" : "#C0392B";
+      drag.previewItems.forEach(function(n){
+        var r = screenRect(n, cs);
+        g.fillRect(r.x, r.y, Math.max(r.w,3), Math.max(r.h,3));
+        g.strokeRect(r.x+1, r.y+1, Math.max(r.w-2,2), Math.max(r.h-2,2));
+      });
+      g.setLineDash([]);
+      return;
     }
 
     if (hover && !drag){
@@ -695,17 +731,23 @@
   function clearHover(){ if (hover){ hover = null; overlay(); } }
 
   // types with a fixed box size stamp that size instead of taking the dragged size
-  function tilesFor(r, type){
+  function tilesFor(r, type, ignore){
     var z = currentSize(type) || { w:1, h:1 };
     var bw = Math.max(1, z.w|0), bh = Math.max(1, z.h|0), out = [];
     var acrossN = Math.max(1, Math.floor(r.w / bw)), downN = Math.max(1, Math.floor(r.h / bh));
     for (var j=0; j<downN; j++){
       for (var i=0; i<acrossN; i++){
         var t = { x: r.x + i*bw, y: r.y + j*bh, w: bw, h: bh };
-        if (fits(type.kind, t, null)) out.push(t);
+        if (fits(type.kind, t, ignore || null)) out.push(t);
       }
     }
     return out;
+  }
+
+  function makeItem(type, box){
+    return { id: uid(), type: type.id, x: box.x, y: box.y, w: box.w, h: box.h,
+             z: BASE_Z[type.kind], label: nextLabel(type), face: type.face || "n",
+             color: freshColor(type) };
   }
   function freshColor(type){
     return (state.autoColor && type.kind === "stall") ? nextBrightColor() : null;
@@ -775,11 +817,49 @@
       return;
     }
     var hit = hitAt(p);
-    if (hit && sel && hit.id === sel.id){
-      drag = { mode:"move", orig: clone(sel), start:p, previewItem: clone(sel), ok:true, preview:false };
+
+    if (e.shiftKey){
+      if (hit){ togglePick(hit); overlay(); return; }
+      drag = { mode:"marquee", start:p, rectRaw:{x:p.x,y:p.y,w:1,h:1}, preview:false, ok:true };
       inl.hidden = true;
       return;
     }
+
+    var type = typeById(state.activeType);
+
+    if (hit && picked(hit)){
+      drag = { mode:"move", start:p, ok:true, preview:false,
+               origs: picks.map(clone), previewItems: picks.map(clone) };
+      inl.hidden = true;
+      return;
+    }
+
+    // clicking an existing item picks it there and then, and can drag it straight away
+    if (hit && selectableHit(hit, type) && type.kind !== "barricade"){
+      select(hit, kindOf(hit) === "stall");
+      drag = { mode:"move", start:p, ok:true, preview:false,
+               origs: picks.map(clone), previewItems: picks.map(clone) };
+      draw();
+      return;
+    }
+
+    // a fixed-size stall appears on the press itself — dragging then extends the row
+    if (fixedSize(type)){
+      var box = (currentSize(type) || {w:1,h:1});
+      var first = { x:p.x, y:p.y, w:box.w, h:box.h };
+      if (!fits(type.kind, first, null)){
+        toast("No room for a " + box.w + " \u00D7 " + box.h + " " + type.name.toLowerCase() + " there");
+        drag = null; return;
+      }
+      snapshot();
+      var made = makeItem(type, first);
+      state.items.push(made);
+      select(made, type.kind === "stall");
+      drag = { mode:"tile", start:p, typeId: type.id, made:[made], moved:false };
+      save(); draw();
+      return;
+    }
+
     drag = { mode:"draw", start:p, hit:hit, preview:false, ok:true,
              rectRaw:{ x:p.x, y:p.y, w:1, h:1 },
              previewItem:{ x:p.x, y:p.y, w:1, h:1 } };
@@ -797,20 +877,58 @@
     if (Math.abs(p.px - drag.start.px) > 4 || Math.abs(p.py - drag.start.py) > 4 ||
         p.x !== drag.start.x || p.y !== drag.start.y) drag.moved = true;
 
+    if (drag.mode === "tile"){
+      var type = typeById(drag.typeId);
+      var r = rectOf(drag.start, p);
+      var ids = drag.made.map(function(i){ return i.id; });
+      var want = tilesFor(r, type, ids), wantKeys = {};
+      want.forEach(function(t){ wantKeys[t.x + "," + t.y] = 1; });
+
+      var changed = false;
+      drag.made = drag.made.filter(function(it){
+        if (wantKeys[it.x + "," + it.y]) return true;
+        var n = state.items.indexOf(it);
+        if (n !== -1) state.items.splice(n, 1);
+        changed = true; return false;
+      });
+      var haveKeys = {};
+      drag.made.forEach(function(it){ haveKeys[it.x + "," + it.y] = 1; });
+      want.forEach(function(t){
+        if (haveKeys[t.x + "," + t.y]) return;
+        var one = makeItem(type, t);
+        state.items.push(one); drag.made.push(one); changed = true;
+      });
+      if (changed){
+        setPicks(drag.made);
+        save(); draw();
+      }
+      return;
+    }
+
     if (drag.mode === "draw"){
       drag.rectRaw = rectOf(drag.start, p);
       updateDrawPreview();
     }
     else if (drag.mode === "move"){
       var dx = p.x - drag.start.x, dy = p.y - drag.start.y;
-      var it = clone(drag.orig);
-      it.x = drag.orig.x + dx; it.y = drag.orig.y + dy;
-      if (it.orient){
-        it.x = Math.max(0, Math.min(state.cols - (it.orient==="h"?it.len:0), it.x));
-        it.y = Math.max(0, Math.min(state.rows - (it.orient==="v"?it.len:0), it.y));
-        drag.ok = true;
-      } else drag.ok = fits(kindOf(it), it, it.id);
-      drag.previewItem = it; drag.preview = (dx!==0 || dy!==0);
+      var ids = drag.origs.map(function(o){ return o.id; });
+      var ok = true;
+      drag.previewItems = drag.origs.map(function(o){
+        var it = clone(o);
+        it.x = o.x + dx; it.y = o.y + dy;
+        if (it.orient){
+          if (it.x < 0 || it.y < 0 ||
+              it.x + (it.orient==="h"?it.len:0) > state.cols ||
+              it.y + (it.orient==="v"?it.len:0) > state.rows) ok = false;
+        } else if (!fits(kindOf(it), it, ids)) ok = false;
+        return it;
+      });
+      drag.ok = ok;
+      drag.preview = (dx!==0 || dy!==0);
+    }
+    else if (drag.mode === "marquee"){
+      drag.rectRaw = rectOf(drag.start, p);
+      drag.preview = true; drag.ok = true;
     }
     else if (drag.mode === "resize"){
       var o = drag.orig, n = clone(o), h = drag.handle;
@@ -863,7 +981,7 @@
                       color: freshColor(type) };
           state.items.push(one); made = one;
         });
-        select(made); save(); draw();
+        select(made, d.tiles.length === 1 && type.kind === "stall"); save(); draw();
         if (d.tiles.length > 1) toast("Placed " + d.tiles.length + " × " + type.name.toLowerCase());
         return;
       }
@@ -876,7 +994,7 @@
       var item = { id: uid(), type: type.id, x:pi.x, y:pi.y, w:pi.w, h:pi.h,
                    z: BASE_Z[type.kind], label: nextLabel(type), face: type.face || "n",
                    color: freshColor(type) };
-      state.items.push(item); select(item); save(); draw(); return;
+      state.items.push(item); select(item, type.kind === "stall"); save(); draw(); return;
     }
   }
 
@@ -894,11 +1012,48 @@
     if (!drag) return;
     var d = drag; drag = null;
 
+    if (d.mode === "tile"){
+      if (d.made.length > 1){
+        setPicks(d.made);
+        toast("Placed " + d.made.length + " \u00D7 " + typeById(d.typeId).name.toLowerCase());
+      } else if (d.made.length === 1){
+        select(d.made[0], kindOf(d.made[0]) === "stall");
+      }
+      save(); draw(); return;
+    }
+
     if (d.mode === "draw"){ commitDraw(d); return; }
+
+    if (d.mode === "marquee"){
+      var r = d.rectRaw;
+      var inside = state.items.filter(function(i){
+        var b = boxOf(i);
+        return b.x < r.x + r.w && r.x < b.x + Math.max(b.w,1) &&
+               b.y < r.y + r.h && r.y < b.y + Math.max(b.h,1);
+      });
+      setPicks(inside);
+      if (inside.length) toast(inside.length + " selected — drag any of them to move the group");
+      draw(); return;
+    }
 
     if (!d.moved){ clickAt(d.start); return; }   // grabbed a handle but never dragged
     if (!sel){ draw(); return; }
-    if (!d.ok){ toast(d.mode === "move" ? "Cannot drop it there" : "Cannot resize it into that space"); draw(); return; }
+    if (!d.ok){
+      toast(d.mode === "move" ? (picks.length > 1 ? "The group does not fit there" : "Cannot drop it there")
+                              : "Cannot resize it into that space");
+      draw(); return;
+    }
+
+    if (d.mode === "move"){
+      snapshot();
+      d.previewItems.forEach(function(n){
+        var it = state.items.filter(function(i){ return i.id === n.id; })[0];
+        if (!it) return;
+        it.x = n.x; it.y = n.y;
+      });
+      renderSel(false); save(); draw(); return;
+    }
+
     var n = d.previewItem;
     sel.x = n.x; sel.y = n.y;
     if (n.orient) sel.len = n.len; else { sel.w = n.w; sel.h = n.h; }
@@ -915,36 +1070,78 @@
     }
     if (/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
     if (!sel) return;
+    if (e.key === "a" && (e.ctrlKey || e.metaKey)){
+      e.preventDefault(); setPicks(state.items.slice());
+      toast(picks.length + " items selected"); draw(); return;
+    }
     if (e.key === "Delete" || e.key === "Backspace"){ e.preventDefault(); removeSel(); return; }
     if (e.key === "Escape"){ select(null); draw(); return; }
     if (e.key === "r" || e.key === "R"){
       if (kindOf(sel) === "stall"){
         e.preventDefault();
-        sel.face = FACES[(FACES.indexOf(sel.face || "n") + 1) % 4];
-        typeById(sel.type).face = sel.face;
-        select(sel); save(); draw(); hint();
-        toast("Faces " + FACE_WORD[sel.face] + " — new ones follow");
+        var face = FACES[(FACES.indexOf(sel.face || "n") + 1) % 4];
+        picks.forEach(function(it){ if (kindOf(it) === "stall") it.face = face; });
+        typeById(sel.type).face = face;
+        renderSel(false); save(); draw(); hint();
+        toast("Faces " + FACE_WORD[face] + " — new ones follow");
       }
       return;
     }
     var d = {ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];
     if (!d) return;
     e.preventDefault();
-    var moved = Object.assign(boxOf(sel), { x: sel.x + d[0], y: sel.y + d[1] });
-    moved.id = sel.id;
-    if (sel.orient || fits(kindOf(sel), moved, sel.id)){
-      sel.x = Math.max(0, Math.min(state.cols, moved.x));
-      sel.y = Math.max(0, Math.min(state.rows, moved.y));
-      select(sel); save(); draw();
-    }
+    var ids = pickIds(), all = true;
+    var next = picks.map(function(it){
+      var m = Object.assign(boxOf(it), { x: it.x + d[0], y: it.y + d[1] });
+      if (!it.orient && !fits(kindOf(it), m, ids)) all = false;
+      if (m.x < 0 || m.y < 0 || m.x > state.cols || m.y > state.rows) all = false;
+      return m;
+    });
+    if (!all) return;
+    picks.forEach(function(it, n){ it.x = next[n].x; it.y = next[n].y; });
+    renderSel(false); save(); draw();
   });
 
   /* ---------- selection panel ---------- */
   function select(item, focusLabel){
+    picks = item ? [item] : [];
+    renderSel(focusLabel);
+  }
+  function setPicks(list){ picks = (list || []).slice(); renderSel(false); }
+  function togglePick(item){
+    var i = picks.indexOf(item);
+    if (i === -1) picks.push(item); else picks.splice(i, 1);
+    renderSel(false);
+  }
+  function picked(item){ return picks.indexOf(item) !== -1; }
+  function pickIds(){ return picks.map(function(i){ return i.id; }); }
+
+  function renderSel(focusLabel){
+    picks = picks.filter(function(i){ return state.items.indexOf(i) !== -1; });
+    var item = picks[picks.length - 1] || null;
     sel = item;
-    var box = $("selBox");
+    if (editingId && (!item || editingId !== item.id)) editingId = null;
+    var box = $("selBox"), many = picks.length > 1;
     if (!item){ box.hidden = true; inl.hidden = true; return; }
     box.hidden = false;
+    $("multiInfo").hidden = !many;
+    if (many) $("multiInfo").textContent = picks.length + " items selected — type, facing, colour, layer, duplicate and delete apply to all of them.";
+    $("labelRow").hidden = many;
+    if (many){
+      inl.hidden = true;
+      $("sizeRow").hidden = true;
+      var k0 = kindOf(item);
+      $("faceRow").hidden = !picks.some(function(i){ return kindOf(i) === "stall"; });
+      $("colorRow").hidden = false;
+      $("selSize").textContent = "";
+      $("zVal").textContent = item.z;
+      var optsM = "";
+      state.types.filter(function(t){ return t.kind === k0; }).forEach(function(t){
+        optsM += '<option value="'+t.id+'"'+(t.id===item.type?' selected':'')+'>'+esc(t.name)+'</option>';
+      });
+      $("selType").innerHTML = optsM;
+      return;
+    }
     var kind = kindOf(item), isBar = !!item.orient;
     $("selLabel").value = item.label || "";
     var opts = "";
@@ -984,22 +1181,36 @@
     placeInline();
     if (focusLabel) editLabel();
   }
-  var inl = $("inlineLabel"), inlWas = "";
+  var inl = $("inlineLabel"), inlWas = "", editingId = null;
+  // the box sits exactly over the stall, so typing happens on the stall itself
   function placeInline(){
-    if (!sel || kindOf(sel) !== "stall" || state.items.indexOf(sel) === -1 || drag){
-      inl.hidden = true; return;
+    if (!sel || kindOf(sel) !== "stall" || state.items.indexOf(sel) === -1 ||
+        drag || picks.length > 1){
+      inl.hidden = true; editingId = null; return;
     }
     var cs = state.cell, r = screenRect(sel, cs);
+    var t = typeById(sel.type), fill = sel.color || t.color;
+    var size = Math.min(Math.max(8, Math.min(r.w, r.h)*0.34), r.h*0.5, r.w*0.42);
     inl.hidden = false;
-    inl.style.minWidth = Math.max(66, r.w) + "px";
-    inl.style.left = Math.max(0, r.x) + "px";
-    var top = r.y - 34;
-    inl.style.top = (top < 0 ? r.y + r.h + 6 : top) + "px";
+    inl.style.left = r.x + "px";
+    inl.style.top = (r.y + (r.h - size*1.5)/2) + "px";
+    inl.style.width = r.w + "px";
+    inl.style.height = (size*1.5) + "px";
+    inl.style.fontSize = size.toFixed(1) + "px";
+    inl.style.color = textColor(fill);
+    inl.style.caretColor = textColor(fill);
   }
   function editLabel(){
-    if (inl.hidden) return;
-    inlWas = sel ? (sel.label || "") : "";
+    if (inl.hidden || !sel) return;
+    inlWas = sel.label || "";
+    editingId = sel.id;
     inl.focus(); inl.select();
+    draw();
+  }
+  function endEdit(){
+    if (!editingId) return;
+    editingId = null;
+    save(); draw();
   }
   inl.addEventListener("input", function(){
     if (!sel) return;
@@ -1008,7 +1219,7 @@
     draw(); placeInline();
   });
   inl.addEventListener("keydown", function(e){
-    if (e.key === "Enter"){ e.preventDefault(); this.blur(); save(); }
+    if (e.key === "Enter"){ e.preventDefault(); this.blur(); }
     else if (e.key === "Escape"){
       e.preventDefault();
       if (sel){ sel.label = inlWas; $("selLabel").value = inlWas; this.value = inlWas; draw(); }
@@ -1016,7 +1227,7 @@
     }
     e.stopPropagation();
   });
-  inl.addEventListener("blur", function(){ save(); });
+  inl.addEventListener("blur", endEdit);
 
   var history = [];
   function snapshot(){
@@ -1039,10 +1250,13 @@
   }
 
   function removeSel(){
-    if (!sel) return;
+    if (!picks.length) return;
     snapshot();
-    state.items = state.items.filter(function(i){ return i.id !== sel.id; });
+    var ids = pickIds();
+    var n = picks.length;
+    state.items = state.items.filter(function(i){ return ids.indexOf(i.id) === -1; });
     select(null); save(); draw();
+    if (n > 1) toast("Deleted " + n + " items");
   }
   $("selSizeSel").addEventListener("change", function(){
     if (!sel) return;
@@ -1056,18 +1270,30 @@
     if (!sel) return;
     sel.label = this.value; inl.value = this.value; save(); draw();
   });
-  $("selType").addEventListener("change", function(){ if (sel){ sel.type = this.value; save(); draw(); } });
+  $("selType").addEventListener("change", function(){
+    if (!picks.length) return;
+    var v = this.value, kind = typeById(v).kind;
+    picks.forEach(function(it){ if (kindOf(it) === kind) it.type = v; });
+    save(); draw();
+  });
   $("selFace").addEventListener("change", function(){
     if (!sel) return;
-    sel.face = this.value;
-    typeById(sel.type).face = this.value;   // the next stalls of this type follow it
+    var v = this.value;
+    picks.forEach(function(it){ if (kindOf(it) === "stall") it.face = v; });
+    typeById(sel.type).face = v;            // the next stalls of this type follow it
     save(); draw(); hint();
     toast("New " + typeById(sel.type).name.toLowerCase() + " stalls will face " + FACE_WORD[this.value]);
   });
-  $("selColor").addEventListener("input", function(){ if (sel){ sel.color = this.value; save(); draw(); } });
+  $("selColor").addEventListener("input", function(){
+    if (!picks.length) return;
+    var v = this.value;
+    picks.forEach(function(it){ if (!it.orient) it.color = v; });
+    save(); draw();
+  });
   $("selColorReset").addEventListener("click", function(){
-    if (!sel) return;
-    delete sel.color; select(sel); save(); draw(); toast("Back to the type colour");
+    if (!picks.length) return;
+    picks.forEach(function(it){ delete it.color; });
+    renderSel(false); save(); draw(); toast("Back to the type colour");
   });
   $("autoColor").addEventListener("change", function(){
     state.autoColor = this.checked;
@@ -1088,6 +1314,7 @@
   });
   $("delBtn").addEventListener("click", removeSel);
   $("dupBtn").addEventListener("click", function(){
+    if (picks.length > 1){ duplicateGroup(); return; }
     if (!sel) return;
     var type = typeById(sel.type);
     if (sel.orient){
@@ -1108,15 +1335,50 @@
     state.items.push(copy); select(copy); save(); draw();
   });
 
+  // copy every selected item, shifted to the first free offset below or beside them
+  function duplicateGroup(){
+    var ids = pickIds();
+    var box = { x: Infinity, y: Infinity, x2: -Infinity, y2: -Infinity };
+    picks.forEach(function(it){
+      var b = boxOf(it);
+      box.x = Math.min(box.x, b.x); box.y = Math.min(box.y, b.y);
+      box.x2 = Math.max(box.x2, b.x + Math.max(b.w,1));
+      box.y2 = Math.max(box.y2, b.y + Math.max(b.h,1));
+    });
+    var tries = [[0, box.y2 - box.y], [box.x2 - box.x, 0], [0, box.y2 - box.y + 1]];
+    var use = null;
+    tries.forEach(function(off){
+      if (use) return;
+      var fine = picks.every(function(it){
+        if (it.orient) return true;
+        var m = { x: it.x + off[0], y: it.y + off[1], w: it.w, h: it.h };
+        return fits(kindOf(it), m, ids);
+      });
+      if (fine) use = off;
+    });
+    if (!use){ toast("No free space for a copy of the group"); return; }
+    snapshot();
+    var made = [];
+    picks.forEach(function(it){
+      var type = typeById(it.type);
+      var copy = clone(it);
+      copy.id = uid(); copy.x = it.x + use[0]; copy.y = it.y + use[1];
+      if (kindOf(it) === "stall") copy.label = nextLabel(type);
+      state.items.push(copy); made.push(copy);
+    });
+    setPicks(made); save(); draw();
+    toast("Copied " + made.length + " items");
+  }
+
   /* ---------- z order ---------- */
   function zRange(){
     var zs = state.items.map(function(i){ return i.z; });
     return { min: zs.length ? Math.min.apply(null, zs) : 30, max: zs.length ? Math.max.apply(null, zs) : 30 };
   }
   function setZ(fn){
-    if (!sel) return;
+    if (!picks.length) return;
     var r = zRange();
-    sel.z = Math.max(1, Math.min(999, fn(sel.z, r)));
+    picks.forEach(function(it){ it.z = Math.max(1, Math.min(999, fn(it.z, r))); });
     $("zVal").textContent = sel.z; save(); draw();
   }
   $("zFront").addEventListener("click", function(){ setZ(function(z,r){ return r.max+1; }); });
