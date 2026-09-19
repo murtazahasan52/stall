@@ -116,6 +116,7 @@
   <span id="docName" class="docname"></span>
   <button id="saveBtn">Save design</button>
   <button id="designsBtn">Designs</button>
+  <button id="posterBtn">Save poster</button>
   <button id="pngBtn">Save PNG</button>
   <button id="pdfBtn">Save PDF</button>
   <button id="jsonBtn">Export JSON</button>
@@ -490,7 +491,7 @@
       var px=it.x*cs, py=it.y*cs, pw=it.w*cs, ph=it.h*cs, fill = fillOf(it, t);
       if (EXPORT){
         // exactly the cells it occupies — spacing on the sheet matches the layout
-        var lw = Math.max(1, cs*0.035);
+        var lw = Math.max(1.5, cs*0.022);
         g.fillStyle = fill;
         g.fillRect(px, py, pw, ph);
         g.strokeStyle = "rgba(7,15,33,.5)"; g.lineWidth = lw;
@@ -519,11 +520,15 @@
           size = Math.max(6, size * room / tw);
           g.font = weight + size.toFixed(1) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
         }
+        var bar = EXPORT ? Math.min(pw, ph) * 0.07 : 0;
+        var fc = it.face || "n";
+        var ox = (fc === "w" ? bar/2 : fc === "e" ? -bar/2 : 0);
+        var oy = (fc === "n" ? bar/2 : fc === "s" ? -bar/2 : 0);
         g.save();
         g.beginPath(); g.rect(px, py, pw, ph); g.clip();
         g.fillStyle = textColor(fill);
         g.textAlign = "center"; g.textBaseline = "middle";
-        g.fillText(txt, px + pw/2, py + ph/2);
+        g.fillText(txt, px + pw/2 + ox, py + ph/2 + oy);
         g.restore();
       }
     } else {
@@ -551,7 +556,8 @@
 
   function drawFace(g, it, px, py, pw, ph, ink){
     var face = it.face || "n";
-    var th = Math.max(2, Math.min(pw, ph) * 0.13);
+    var th = EXPORT ? Math.max(2, Math.min(pw, ph) * 0.07)
+                    : Math.max(2, Math.min(pw, ph) * 0.13);
     g.save();
     g.globalAlpha = .85; g.fillStyle = ink;
     if (face === "n") g.fillRect(px+2, py+2, pw-4, th);
@@ -723,6 +729,7 @@
 
   var curDPR = DPR, rafId = 0;
   var EXPORT = false;              // true while the PNG / PDF sheet is being drawn
+  var POSTER = false;              // true for the decorated version
 
   function roundRect(g, x, y, w, h, r){
     r = Math.max(0, Math.min(r, w/2, h/2));
@@ -1783,6 +1790,104 @@
   });
 
   /* ---------- export ---------- */
+  /* ---------- poster artwork ---------- */
+  function rnd(seed){ var x = Math.sin(seed) * 10000; return x - Math.floor(x); }
+
+  function leafClump(g, x, y, r, seed){
+    var greens = ["#3E8E41", "#4CAF50", "#2E7D32", "#66BB6A"];
+    for (var i = 0; i < 7; i++){
+      var a = rnd(seed + i) * Math.PI * 2, d = rnd(seed + i + 9) * r * 0.6;
+      g.fillStyle = greens[i % greens.length];
+      g.beginPath();
+      g.arc(x + Math.cos(a)*d, y + Math.sin(a)*d, r * (0.45 + rnd(seed+i+21)*0.4), 0, 6.3);
+      g.fill();
+    }
+  }
+  function hedge(g, x, y, w, h, cs){
+    var step = cs * 0.75, r = cs * 0.55, i = 0, t;
+    for (t = x; t <= x + w; t += step){ leafClump(g, t, y, r, i++); leafClump(g, t, y + h, r, i++); }
+    for (t = y; t <= y + h; t += step){ leafClump(g, x, t, r, i++); leafClump(g, x + w, t, r, i++); }
+  }
+  function paving(g, x, y, w, h, cs){
+    g.fillStyle = "#F6EFE2"; g.fillRect(x, y, w, h);
+    g.strokeStyle = "rgba(160,140,110,.18)"; g.lineWidth = 1;
+    g.beginPath();
+    for (var vx = x; vx < x + w; vx += cs*1.6){ g.moveTo(vx, y); g.lineTo(vx, y + h); }
+    for (var vy = y; vy < y + h; vy += cs*1.6){ g.moveTo(x, vy); g.lineTo(x + w, vy); }
+    g.stroke();
+  }
+  function playArt(g, r, cs){
+    var base = r.y + r.h*0.62, u = Math.min(cs, r.h*0.18);
+    // slide
+    g.fillStyle = "#E53935"; g.fillRect(r.x + u*1.2, base - u*2.2, u*1.6, u*2.2);
+    g.fillStyle = "#1E88E5";
+    g.beginPath(); g.moveTo(r.x + u*2.8, base - u*2); g.lineTo(r.x + u*5, base);
+    g.lineTo(r.x + u*4.2, base); g.lineTo(r.x + u*2.8, base - u*1.2); g.closePath(); g.fill();
+    g.fillStyle = "#FDD835"; g.fillRect(r.x + u*1.0, base - u*3.0, u*2.0, u*0.8);
+    // ball pit
+    var bx = r.x + u*8, by = base - u*0.6;
+    g.fillStyle = "#EF5350"; g.beginPath(); g.ellipse(bx, by, u*1.8, u*0.9, 0, 0, 6.3); g.fill();
+    ["#42A5F5","#FFEE58","#66BB6A","#AB47BC"].forEach(function(c, i){
+      g.fillStyle = c;
+      g.beginPath(); g.arc(bx - u*1.1 + i*u*0.75, by - u*0.35, u*0.3, 0, 6.3); g.fill();
+    });
+    // little train
+    var tx = r.x + u*13;
+    ["#F4511E","#FB8C00","#FDD835"].forEach(function(c, i){
+      g.fillStyle = c; g.fillRect(tx + i*u*1.6, base - u*1.2, u*1.3, u*1.2);
+      g.fillStyle = "#37474F";
+      g.beginPath(); g.arc(tx + i*u*1.6 + u*0.35, base, u*0.28, 0, 6.3); g.fill();
+      g.beginPath(); g.arc(tx + i*u*1.6 + u*0.95, base, u*0.28, 0, 6.3); g.fill();
+    });
+  }
+  function foodArt(g, r, cs){
+    var u = Math.min(cs*0.9, r.h*0.16);
+    var cols = Math.max(2, Math.floor(r.w / (u*5))), rows = Math.max(1, Math.floor(r.h / (u*5)));
+    for (var i = 0; i < cols; i++){
+      for (var j = 0; j < rows; j++){
+        var cx = r.x + u*3 + i*(r.w - u*5)/Math.max(1, cols-1 || 1);
+        var cy = r.y + u*3.4 + j*(r.h - u*6)/Math.max(1, rows-1 || 1);
+        if (cx > r.x + r.w - u*2 || cy > r.y + r.h - u*2) continue;
+        g.fillStyle = "#8D6E63";
+        [[-1.6,0],[1.6,0],[0,-1.6],[0,1.6]].forEach(function(o){
+          g.fillRect(cx + o[0]*u - u*0.45, cy + o[1]*u - u*0.45, u*0.9, u*0.9);
+        });
+        g.fillStyle = "#D7B899";
+        g.beginPath(); g.arc(cx, cy, u*1.1, 0, 6.3); g.fill();
+        g.strokeStyle = "rgba(90,60,30,.35)"; g.lineWidth = 1.2; g.stroke();
+      }
+    }
+  }
+  function stageArt(g, r, cs){
+    var u = Math.min(cs, r.w*0.16);
+    g.fillStyle = "#B71C1C"; g.fillRect(r.x + u*0.4, r.y + u*0.4, r.w - u*0.8, r.h*0.42);
+    g.fillStyle = "#0D47A1"; g.fillRect(r.x + u*1.2, r.y + u*1.1, r.w - u*2.4, r.h*0.42 - u*1.4);
+    g.fillStyle = "#37474F";
+    var seatW = (r.w - u*2) / 6;
+    for (var row = 0; row < 6; row++){
+      for (var col = 0; col < 6; col++){
+        var sy = r.y + r.h*0.52 + row*(r.h*0.44/6);
+        if (sy > r.y + r.h - u*0.6) continue;
+        g.fillStyle = "rgba(55,71,79,.85)";
+        g.fillRect(r.x + u + col*seatW, sy, seatW*0.72, r.h*0.44/6*0.62);
+      }
+    }
+  }
+  function decorate(g, cs){
+    itemsOf("zone").forEach(function(it){
+      var name = ((it.label || typeById(it.type).name) + "").toLowerCase();
+      var r = { x: it.x*cs, y: it.y*cs, w: it.w*cs, h: it.h*cs };
+      g.save();
+      g.beginPath(); g.rect(r.x, r.y, r.w, r.h); g.clip();
+      try {
+        if (name.indexOf("play") !== -1) playArt(g, r, cs);
+        else if (name.indexOf("food") !== -1) foodArt(g, r, cs);
+        else if (name.indexOf("stage") !== -1) stageArt(g, r, cs);
+      } catch(e){}
+      g.restore();
+    });
+  }
+
   // the plan is cropped to what is actually drawn, then scaled up to print size
   function contentBounds(){
     if (!state.items.length) return { x:0, y:0, w: Math.min(state.cols, 40), h: Math.min(state.rows, 24) };
@@ -1820,9 +1925,9 @@
 
   // targetW is the width in pixels of the finished sheet
   function buildExport(targetW){
-    targetW = targetW || 4400;
+    targetW = targetW || 5200;
     var b = contentBounds();
-    var cs = Math.max(30, Math.min(150, Math.round(targetW / b.w)));
+    var cs = Math.max(36, Math.min(170, Math.round(targetW / b.w)));
     var planW = b.w*cs, planH = b.h*cs;
     var pad = Math.round(cs*0.9);
     var titleH = Math.round(cs*2.2);
@@ -1838,6 +1943,7 @@
     var g = c.getContext("2d");
 
     g.fillStyle = "#FFFFFF"; g.fillRect(0, 0, W, H);
+    if (POSTER) paving(g, pad*0.4, pad + titleH - pad*0.4, planW + pad*1.2, planH + pad*0.8, cs);
 
     var titleSize = Math.max(26, Math.round(cs*0.95));
     g.fillStyle = "#070F21"; g.textAlign = "left"; g.textBaseline = "alphabetic";
@@ -1850,10 +1956,15 @@
 
     EXPORT = true;
     g.save();
-    g.beginPath(); g.rect(pad, pad + titleH, planW, planH); g.clip();
+    g.beginPath(); g.rect(pad*0.2, pad + titleH - pad*0.6, planW + pad*1.6, planH + pad*1.2); g.clip();
     g.translate(pad - b.x*cs, pad + titleH - b.y*cs);
-    try { paintScene(g, cs); } catch(e){}
+    try { paintScene(g, cs); if (POSTER) decorate(g, cs); } catch(e){}
     g.restore();
+    if (POSTER){
+      g.save();
+      try { hedge(g, pad*0.55, pad + titleH - pad*0.25, planW + pad*0.9, planH + pad*0.5, cs); } catch(e){}
+      g.restore();
+    }
     EXPORT = false;
 
     if (used.length){
@@ -1893,14 +2004,21 @@
   function slug(){
     return (state.title||"stall-layout").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"") || "stall-layout";
   }
+  $("posterBtn").addEventListener("click", function(){
+    POSTER = true;
+    var c;
+    try { c = buildExport(5200); } finally { POSTER = false; }
+    download(c.toDataURL("image/png"), slug()+"-poster.png");
+    toast("Poster saved — " + c.width + " \u00D7 " + c.height + " px");
+  });
   $("pngBtn").addEventListener("click", function(){
-    var c = buildExport(4400);
+    var c = buildExport(5200);
     download(c.toDataURL("image/png"), slug()+".png");
     toast("PNG saved — " + c.width + " \u00D7 " + c.height + " px");
   });
   $("pdfBtn").addEventListener("click", function(){
     if (!window.jspdf || !window.jspdf.jsPDF){ toast("PDF library did not load — check your connection"); return; }
-    var c = buildExport(4400);
+    var c = buildExport(5200);
     // page shaped like the plan, long side 420 mm (A3), so nothing is wasted
     var ratio = c.height / c.width, longSide = 420, shortSide = Math.round(longSide * ratio);
     var fmt = (c.width >= c.height) ? [longSide, Math.max(120, shortSide)]
@@ -1910,7 +2028,7 @@
     });
     var pw = pdf.internal.pageSize.getWidth(), ph = pdf.internal.pageSize.getHeight(), m = 6;
     var sc = Math.min((pw-m*2)/c.width, (ph-m*2)/c.height);
-    pdf.addImage(c.toDataURL("image/jpeg", .95), "JPEG",
+    pdf.addImage(c.toDataURL("image/png"), "PNG",
                  (pw-c.width*sc)/2, (ph-c.height*sc)/2, c.width*sc, c.height*sc);
     pdf.save(slug()+".pdf");
     toast("PDF saved — " + Math.round(pw) + " \u00D7 " + Math.round(ph) + " mm");

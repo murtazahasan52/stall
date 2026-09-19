@@ -99,6 +99,18 @@ needs and they stop at the smallest size that still holds every item, and say so
 Set "1 box =" to the real metre value and every item shows its true size.
 Work is kept in the browser, so a refresh does not lose the layout.
 
+## Poster output
+
+**Save poster** renders a decorated version of the same plan: warm paving under
+the layout, a hedge of foliage around it, and drawn scenery inside the areas —
+a stage with screen and seating rows, playground equipment in a Play Zone, round
+tables and chairs in a Food Court. The scenery is chosen by the area's name, so
+an area called "Food Court" gets tables and one called "Play Zone" gets the
+slide and ball pit.
+
+This is drawn artwork, not a generated photograph — think of it as a presentable
+floor plan rather than the rendered illustration a designer would produce.
+
 ## PNG and PDF output
 
 Both exports crop to what you have actually drawn — the empty part of a 140 x 100
