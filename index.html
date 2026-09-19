@@ -101,6 +101,7 @@
   <input class="layoutTitle" id="title" value="Business Expo — Nagpur" aria-label="Layout title">
   <span class="spacer"></span>
   <span id="docName" class="docname"></span>
+  <button id="saveBtn">Save design</button>
   <button id="designsBtn">Designs</button>
   <button id="pngBtn">Save PNG</button>
   <button id="pdfBtn">Save PDF</button>
@@ -130,6 +131,9 @@
         <button id="addType">Add type</button>
         <button id="editType">Edit type</button>
       </div>
+      <label class="row" style="gap:7px;margin-top:9px;font-size:12px;color:var(--muted)">
+        <input type="checkbox" id="autoColor" style="width:auto;flex:none"> Give every new stall its own colour
+      </label>
       <p class="hint" id="drawHint"></p>
     </div>
 
@@ -141,6 +145,20 @@
         </div>
         <div class="row" style="margin-top:8px">
           <label class="f">Type<select id="selType"></select></label>
+        </div>
+        <div class="row" id="faceRow" style="margin-top:8px">
+          <label class="f">Opening faces
+            <select id="selFace">
+              <option value="n">Up</option>
+              <option value="s">Down</option>
+              <option value="e">Right</option>
+              <option value="w">Left</option>
+            </select>
+          </label>
+        </div>
+        <div class="row" id="colorRow" style="margin-top:8px;align-items:flex-end">
+          <label class="f" style="flex:none">Colour<input type="color" id="selColor"></label>
+          <button class="mini" id="selColorReset" style="flex:1">Use type colour</button>
         </div>
         <div class="row" id="rectFields" style="margin-top:8px">
           <label class="f">X<input type="number" id="selX" min="0"></label>
@@ -166,7 +184,7 @@
           <button id="dupBtn">Duplicate</button>
           <button class="danger" id="delBtn">Delete</button>
         </div>
-        <p class="hint">Drag the selected item to move it, drag its handles to resize. Arrow keys nudge, Delete removes.</p>
+        <p class="hint">Drag the selected item to move it, drag its handles to resize. Arrow keys nudge, R turns the opening, Delete removes.</p>
       </div>
     </div>
 
@@ -205,6 +223,16 @@
     <label class="f">Width in boxes<input type="number" id="dW" min="0" max="60" value="0"></label>
     <label class="f">Height in boxes<input type="number" id="dH" min="0" max="60" value="0"></label>
   </div>
+  <div class="row" id="dFaceRow" style="margin-bottom:6px">
+    <label class="f">Opening faces
+      <select id="dFace">
+        <option value="n">Up</option>
+        <option value="s">Down</option>
+        <option value="e">Right</option>
+        <option value="w">Left</option>
+      </select>
+    </label>
+  </div>
   <p class="note" id="dSizeHint">Set 3 × 3 and every click drops a 3 × 3 stall. Drag to fill a row or block with them. Leave both 0 to drag each size by hand.</p>
   <label class="f" style="margin-bottom:10px">Rate per stall (optional)<input type="number" id="dRate" min="0" step="500"></label>
   <label class="f" style="margin-bottom:14px;flex:none">Colour<input type="color" id="dColor" value="#E9A031"></label>
@@ -231,8 +259,11 @@
 
   <div id="srvMain" hidden>
     <div class="dlist" id="srvList"></div>
-    <label class="f" style="margin-bottom:10px">Design name
+    <label class="f" style="margin-bottom:8px">Design name
       <input type="text" id="srvName" placeholder="Business Expo — Nagpur">
+    </label>
+    <label class="row" style="gap:7px;margin-bottom:10px;font-size:12px;color:var(--muted)">
+      <input type="checkbox" id="srvAuto" style="width:auto;flex:none"> Keep saving this design automatically
     </label>
     <div class="btns">
       <button class="primary" id="srvSave">Save</button>
@@ -257,15 +288,19 @@
   var KINDS = { stall:"Stalls", zone:"Areas", path:"Pathways", barricade:"Barricades" };
   var BASE_Z = { path:10, zone:20, stall:30, barricade:40 };
   var HANDLES = ["nw","n","ne","e","se","s","sw","w"];
+  var FACES = ["n","e","s","w"];
+  var GOLDEN = 137.508;
+  var FACE_WORD = { n:"up", e:"right", s:"down", w:"left" };
+  var WORD_FACE = { up:"n", right:"e", down:"s", left:"w" };
 
   var DEFAULTS = {
     title:"Business Expo — Nagpur",
     cols:44, rows:30, cell:22, meters:1,
     types:[
-      {id:"t1", name:"Regular",    kind:"stall", prefix:"Y", color:"#E9A031", rate:53000, bw:3, bh:3},
-      {id:"t2", name:"Ruby",       kind:"stall", prefix:"L", color:"#C2476A", rate:24000, bw:3, bh:3},
-      {id:"t3", name:"Premium",    kind:"stall", prefix:"T", color:"#1F3B73", rate:null, bw:6, bh:6},
-      {id:"t4", name:"Food stall", kind:"stall", prefix:"F", color:"#B8740F", rate:null, bw:3, bh:3},
+      {id:"t1", name:"Regular",    kind:"stall", prefix:"Y", color:"#E9A031", rate:53000, bw:3, bh:3, face:"n"},
+      {id:"t2", name:"Ruby",       kind:"stall", prefix:"L", color:"#C2476A", rate:24000, bw:3, bh:3, face:"n"},
+      {id:"t3", name:"Premium",    kind:"stall", prefix:"T", color:"#1F3B73", rate:null, bw:6, bh:6, face:"s"},
+      {id:"t4", name:"Food stall", kind:"stall", prefix:"F", color:"#B8740F", rate:null, bw:3, bh:3, face:"n"},
       {id:"t5", name:"Food Court", kind:"zone",  prefix:"",  color:"#E4C9A0", rate:null},
       {id:"t6", name:"Play Zone",  kind:"zone",  prefix:"",  color:"#9FD2C4", rate:null},
       {id:"t7", name:"Stage",      kind:"zone",  prefix:"",  color:"#B3A8D6", rate:null},
@@ -273,6 +308,7 @@
       {id:"t9", name:"Barricade",  kind:"barricade", prefix:"", color:"#D9822B", rate:null}
     ],
     activeType:"t1",
+    autoColor:true, hue:24,
     items:[]
   };
   var state = JSON.parse(JSON.stringify(DEFAULTS));
@@ -282,7 +318,8 @@
   function $(id){ return document.getElementById(id); }
 
   /* ---------- storage ---------- */
-  function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} }
+  function persist(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} }
+  function save(){ persist(); markDirty(); }
   function restore(){
     try {
       var raw = localStorage.getItem(KEY) || localStorage.getItem("stall-layout-designer-v2");
@@ -312,6 +349,24 @@
     var t = $("toast"); t.textContent = msg; t.classList.add("on");
     clearTimeout(toast._t); toast._t = setTimeout(function(){ t.classList.remove("on"); }, 2000);
   }
+  function hslHex(h, sat, light){
+    var c = (1 - Math.abs(2*light - 1)) * sat, x = c * (1 - Math.abs(((h/60) % 2) - 1)), m = light - c/2;
+    var r, g, b;
+    if (h < 60){ r=c; g=x; b=0; } else if (h < 120){ r=x; g=c; b=0; }
+    else if (h < 180){ r=0; g=c; b=x; } else if (h < 240){ r=0; g=x; b=c; }
+    else if (h < 300){ r=x; g=0; b=c; } else { r=c; g=0; b=x; }
+    return "#" + [r,g,b].map(function(v){
+      return Math.round((v+m)*255).toString(16).padStart(2,"0");
+    }).join("");
+  }
+  // walks the colour wheel by the golden angle, so consecutive colours never look alike
+  function nextBrightColor(){
+    var h = (typeof state.hue === "number" ? state.hue : 24) % 360;
+    state.hue = (h + GOLDEN) % 360;
+    var light = 0.52 + ((Math.round(h) % 3) * 0.045);
+    return hslHex(h, 0.72, light);
+  }
+
   function textColor(hex){
     var c = (hex||"#ffffff").replace("#","");
     if (c.length===3) c = c[0]+c[0]+c[1]+c[1]+c[2]+c[2];
@@ -391,13 +446,14 @@
       g.setLineDash([]);
       labelBlock(g, it, cs, false);
     } else if (kind === "stall"){
-      var px=it.x*cs, py=it.y*cs, pw=it.w*cs, ph=it.h*cs;
-      g.fillStyle = t.color; g.globalAlpha = .92;
+      var px=it.x*cs, py=it.y*cs, pw=it.w*cs, ph=it.h*cs, fill = it.color || t.color;
+      g.fillStyle = fill; g.globalAlpha = .92;
       g.fillRect(px+1, py+1, pw-2, ph-2); g.globalAlpha = 1;
       g.strokeStyle = "rgba(7,15,33,.55)"; g.lineWidth = 1.2;
       g.strokeRect(px+1.5, py+1.5, pw-3, ph-3);
+      drawFace(g, it, px, py, pw, ph, textColor(fill));
       var size = Math.min(Math.max(8, Math.min(pw,ph)*0.34), ph*0.5, pw*0.42);
-      g.fillStyle = textColor(t.color);
+      g.fillStyle = textColor(fill);
       g.font = "600 " + size.toFixed(1) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
       g.textAlign = "center"; g.textBaseline = "middle";
       g.fillText(it.label || "", px+pw/2, py+ph/2);
@@ -422,6 +478,28 @@
       g.strokeStyle = "rgba(7,15,33,.5)"; g.lineWidth = 1;
       g.strokeRect(r.x+.5, r.y+.5, r.w-1, r.h-1);
     }
+  }
+
+  function drawFace(g, it, px, py, pw, ph, ink){
+    var face = it.face || "n";
+    var th = Math.max(2, Math.min(pw, ph) * 0.13);
+    g.save();
+    g.globalAlpha = .85; g.fillStyle = ink;
+    if (face === "n") g.fillRect(px+2, py+2, pw-4, th);
+    else if (face === "s") g.fillRect(px+2, py+ph-2-th, pw-4, th);
+    else if (face === "w") g.fillRect(px+2, py+2, th, ph-4);
+    else g.fillRect(px+pw-2-th, py+2, th, ph-4);
+
+    var a = Math.min(pw, ph) * 0.12, cx = px+pw/2, cy = py+ph/2;
+    if (Math.min(pw, ph) > 46){
+      g.globalAlpha = .9; g.beginPath();
+      if (face === "n"){ g.moveTo(cx, py+th+3); g.lineTo(cx-a, py+th+3+a); g.lineTo(cx+a, py+th+3+a); }
+      else if (face === "s"){ g.moveTo(cx, py+ph-th-3); g.lineTo(cx-a, py+ph-th-3-a); g.lineTo(cx+a, py+ph-th-3-a); }
+      else if (face === "w"){ g.moveTo(px+th+3, cy); g.lineTo(px+th+3+a, cy-a); g.lineTo(px+th+3+a, cy+a); }
+      else { g.moveTo(px+pw-th-3, cy); g.lineTo(px+pw-th-3-a, cy-a); g.lineTo(px+pw-th-3-a, cy+a); }
+      g.closePath(); g.fill();
+    }
+    g.restore();
   }
 
   function labelBlock(g, it, cs, faint){
@@ -547,6 +625,9 @@
     }
     return out;
   }
+  function freshColor(type){
+    return (state.autoColor && type.kind === "stall") ? nextBrightColor() : null;
+  }
   function fixedSize(type){ return type.kind !== "barricade" && type.bw > 0 && type.bh > 0; }
   // a plain click selects a stall, or an area/pathway while that kind is the active type;
   // clicking an area with a stall type active places a stall inside it instead
@@ -666,7 +747,8 @@
         var made = null;
         d.tiles.forEach(function(t){
           var one = { id: uid(), type: type.id, x:t.x, y:t.y, w:t.w, h:t.h,
-                      z: BASE_Z[type.kind], label: nextLabel(type) };
+                      z: BASE_Z[type.kind], label: nextLabel(type), face: type.face || "n",
+                      color: freshColor(type) };
           state.items.push(one); made = one;
         });
         select(made); save(); draw();
@@ -679,7 +761,8 @@
         draw(); return;
       }
       var item = { id: uid(), type: type.id, x:pi.x, y:pi.y, w:pi.w, h:pi.h,
-                   z: BASE_Z[type.kind], label: nextLabel(type) };
+                   z: BASE_Z[type.kind], label: nextLabel(type), face: type.face || "n",
+                   color: freshColor(type) };
       state.items.push(item); select(item); save(); draw(); return;
     }
 
@@ -697,6 +780,14 @@
     if (!sel) return;
     if (e.key === "Delete" || e.key === "Backspace"){ e.preventDefault(); removeSel(); return; }
     if (e.key === "Escape"){ select(null); draw(); return; }
+    if (e.key === "r" || e.key === "R"){
+      if (kindOf(sel) === "stall"){
+        e.preventDefault();
+        sel.face = FACES[(FACES.indexOf(sel.face || "n") + 1) % 4];
+        select(sel); save(); draw(); toast("Opening faces " + FACE_WORD[sel.face]);
+      }
+      return;
+    }
     var d = {ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];
     if (!d) return;
     e.preventDefault();
@@ -723,6 +814,10 @@
     });
     $("selType").innerHTML = opts;
     $("rectFields").hidden = isBar; $("barFields").hidden = !isBar;
+    $("faceRow").hidden = (kind !== "stall");
+    if (kind === "stall") $("selFace").value = item.face || "n";
+    $("colorRow").hidden = isBar;
+    if (!isBar) $("selColor").value = item.color || typeById(item.type).color;
     if (isBar){
       $("barX").value = item.x; $("barY").value = item.y;
       $("barLen").value = item.len; $("barOrient").value = item.orient;
@@ -762,6 +857,17 @@
   });
   $("selLabel").addEventListener("input", function(){ if (sel){ sel.label = this.value; save(); draw(); } });
   $("selType").addEventListener("change", function(){ if (sel){ sel.type = this.value; save(); draw(); } });
+  $("selFace").addEventListener("change", function(){ if (sel){ sel.face = this.value; save(); draw(); } });
+  $("selColor").addEventListener("input", function(){ if (sel){ sel.color = this.value; save(); draw(); } });
+  $("selColorReset").addEventListener("click", function(){
+    if (!sel) return;
+    delete sel.color; select(sel); save(); draw(); toast("Back to the type colour");
+  });
+  $("autoColor").addEventListener("change", function(){
+    state.autoColor = this.checked; save();
+    toast(this.checked ? "New stalls will each get their own colour"
+                       : "New stalls will use their type colour");
+  });
   $("delBtn").addEventListener("click", removeSel);
   $("dupBtn").addEventListener("click", function(){
     if (!sel) return;
@@ -779,7 +885,8 @@
     }
     if (!placed){ toast("No free space for a copy"); return; }
     var copy = { id: uid(), type: sel.type, x:placed.x, y:placed.y, w:placed.w, h:placed.h,
-                 z: sel.z, label: nextLabel(type) };
+                 z: sel.z, label: nextLabel(type), face: sel.face || type.face || "n",
+                 color: freshColor(type) };
     state.items.push(copy); select(copy); save(); draw();
   });
 
@@ -857,8 +964,10 @@
 
   var dlg = $("typeDlg"), editing = null;
   function toggleSizeRow(){
-    var isBar = $("dKind").value === "barricade";
-    $("dSizeRow").hidden = isBar; $("dSizeHint").hidden = isBar;
+    var kind = $("dKind").value;
+    $("dSizeRow").hidden = (kind === "barricade");
+    $("dSizeHint").hidden = (kind === "barricade");
+    $("dFaceRow").hidden = (kind !== "stall");
   }
   function openType(t){
     editing = t;
@@ -866,7 +975,8 @@
     $("dKind").value = t ? t.kind : "stall";
     $("dPrefix").value = t ? t.prefix : "";
     $("dRate").value = t && t.rate ? t.rate : "";
-    $("dColor").value = t ? t.color : "#E9A031";
+    $("dColor").value = t ? t.color : nextBrightColor();
+    $("dFace").value = (t && t.face) || "n";
     $("dW").value = t && t.bw ? t.bw : 0;
     $("dH").value = t && t.bh ? t.bh : 0;
     $("dDelete").hidden = !t;
@@ -887,15 +997,16 @@
     var bh = kind === "barricade" ? 0 : Math.max(0, Math.min(60, Math.round(Number($("dH").value) || 0)));
     if (bw && !bh) bh = bw;
     if (bh && !bw) bw = bh;
+    var face = kind === "stall" ? $("dFace").value : "n";
     if (editing){
       if (editing.kind !== kind && countOf(editing.id) > 0){
         toast("Delete its items before changing what it is"); return;
       }
       editing.name=name; editing.kind=kind; editing.prefix=prefix; editing.rate=rate;
-      editing.color=color; editing.bw=bw; editing.bh=bh;
+      editing.color=color; editing.bw=bw; editing.bh=bh; editing.face=face;
     } else {
       var t = { id:"t"+Date.now().toString(36), name:name, kind:kind, prefix:prefix, rate:rate,
-                color:color, bw:bw, bh:bh };
+                color:color, bw:bw, bh:bh, face:face };
       state.types.push(t); state.activeType = t.id;
     }
     dlg.close(); hint(); save(); draw();
@@ -973,7 +1084,17 @@
     used.forEach(function(t, i){
       var col = i%3, row = Math.floor(i/3);
       var x = pad + col*(gridW/3), y = ly + row*26*scale;
-      g.fillStyle = t.color; g.fillRect(x, y-10*scale, 13*scale, 13*scale);
+      var samples = state.items.filter(function(i){ return i.type === t.id && i.color; })
+                               .slice(0, 3).map(function(i){ return i.color; });
+      if (samples.length > 1){
+        samples.forEach(function(col, n){
+          g.fillStyle = col;
+          g.fillRect(x + n*(13*scale/samples.length), y-10*scale, 13*scale/samples.length, 13*scale);
+        });
+      } else {
+        g.fillStyle = samples[0] || t.color;
+        g.fillRect(x, y-10*scale, 13*scale, 13*scale);
+      }
       g.strokeStyle = "rgba(7,15,33,.35)"; g.lineWidth = 1;
       g.strokeRect(x+.5, y-10*scale+.5, 13*scale-1, 13*scale-1);
       g.fillStyle = "#070F21";
@@ -1010,11 +1131,13 @@
       grid: { cols: state.cols, rows: state.rows, meters_per_box: state.meters },
       types: state.types.map(function(t){
         return { name:t.name, kind:t.kind, prefix:t.prefix, color:t.color, rate:t.rate,
-                 box_w: t.bw || 0, box_h: t.bh || 0, count: countOf(t.id) };
+                 box_w: t.bw || 0, box_h: t.bh || 0, faces_word: FACE_WORD[t.face || "n"],
+                 count: countOf(t.id) };
       }),
       stalls: itemsOf("stall").map(function(i){
         var t = typeById(i.type);
         return { stall:i.label, category:t.name, prefix:t.prefix, x:i.x, y:i.y, w:i.w, h:i.h, z:i.z,
+                 facing: FACE_WORD[i.face || "n"], color: i.color || typeById(i.type).color,
                  size_m: (i.w*state.meters)+"x"+(i.h*state.meters) };
       }),
       areas: itemsOf("zone").map(function(i){
@@ -1046,7 +1169,7 @@
           state.types = src.map(function(t,i){
             return { id:"t"+i, name:t.name, kind:t.kind||"stall", prefix:t.prefix||"",
                      color:t.color||"#E9A031", rate:t.rate||null,
-                     bw: t.box_w || 0, bh: t.box_h || 0 };
+                     bw: t.box_w || 0, bh: t.box_h || 0, face: WORD_FACE[t.faces_word] || "n" };
           });
         }
         function typeNamed(name, kind){
@@ -1059,7 +1182,8 @@
         state.items = [];
         (d.stalls||[]).forEach(function(s){
           state.items.push({ id:uid(), type: typeNamed(s.category,"stall").id, x:s.x, y:s.y, w:s.w, h:s.h,
-                             z: s.z || BASE_Z.stall, label:s.stall });
+                             z: s.z || BASE_Z.stall, label:s.stall,
+                             face: WORD_FACE[s.facing] || "n", color: s.color || null });
         });
         (d.areas||[]).forEach(function(a){
           state.items.push({ id:uid(), type: typeNamed(a.type||a.name,"zone").id, x:a.x, y:a.y, w:a.w, h:a.h,
@@ -1093,15 +1217,58 @@
   /* ---------- designs on the server ---------- */
   var doc = { id:null, name:"" };
   var srv = { reachable:false, storage:false, authed:false };
+  var auto = { on:true, dirty:false, busy:false, timer:null, at:"" };
+
+  function clockNow(){
+    return new Date().toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" });
+  }
+  function draftName(){
+    var d = new Date();
+    return "Draft " + d.toLocaleDateString([], { day:"numeric", month:"short" }) + " " + clockNow();
+  }
+  function markDirty(){
+    auto.dirty = true; showDoc();
+    if (!auto.on || !srv.authed || !srv.storage) return;
+    clearTimeout(auto.timer);
+    auto.timer = setTimeout(function(){ pushSave().catch(function(){}); }, 3500);
+  }
+  function pushSave(name){
+    if (auto.busy) return Promise.reject({ message:"Still saving the last change" });
+    if (!srv.reachable || !srv.storage) return Promise.reject({ message:"Server saving is not set up yet" });
+    if (!srv.authed) return Promise.reject({ status:401, message:"Unlock with the password first" });
+    if (!name && !auto.dirty && doc.id) return Promise.resolve({ id: doc.id, name: doc.name });
+    auto.busy = true; showDoc();
+    var title = name || doc.name || draftName();
+    return api("/api/designs", { method:"POST",
+      body: JSON.stringify({ id: doc.id, name: title, data: exportObject() }) })
+      .then(function(d){
+        auto.busy = false; auto.dirty = false; auto.at = clockNow();
+        setDoc(d.id, d.name);
+        if (!$("srvDlg").open) return d;
+        renderSrv(); return d;
+      }, function(err){
+        auto.busy = false;
+        if (err.status === 401){ srv.authed = false; toast("Unlock with the password to keep saving"); }
+        showDoc();
+        throw err;
+      });
+  }
 
   function setDoc(id, name){
     doc.id = id || null; doc.name = name || "";
     state.docId = doc.id; state.docName = doc.name;
-    save(); showDoc();
+    persist(); showDoc();
   }
   function showDoc(){
-    $("docName").textContent = doc.id ? ("Saved · " + doc.name)
-                                      : (doc.name ? doc.name + " · unsaved" : "");
+    var name = doc.name || state.title || "Untitled layout";
+    var tail;
+    if (auto.busy) tail = "saving…";
+    else if (!srv.reachable || !srv.storage) tail = "on this computer only";
+    else if (!srv.authed) tail = "unlock to save on the server";
+    else if (auto.dirty) tail = "unsaved changes";
+    else if (doc.id) tail = "saved" + (auto.at ? " " + auto.at : "");
+    else tail = "not saved yet";
+    $("docName").textContent = name + " · " + tail;
   }
   function api(path, opts){
     var o = Object.assign({ credentials:"same-origin",
@@ -1118,8 +1285,20 @@
   function refreshStatus(){
     return api("/api/auth").then(function(d){
       srv.reachable = true; srv.storage = !!d.storage; srv.authed = !!d.authed;
-    }, function(){ srv.reachable = false; srv.storage = false; srv.authed = false; });
+      showDoc();
+      if (srv.authed && auto.on && auto.dirty) markDirty();
+    }, function(){
+      srv.reachable = false; srv.storage = false; srv.authed = false; showDoc();
+    });
   }
+
+  window.addEventListener("beforeunload", function(){
+    if (!auto.dirty || !auto.on || !srv.authed || !srv.storage || !navigator.sendBeacon) return;
+    try {
+      var payload = JSON.stringify({ id: doc.id, name: doc.name || draftName(), data: exportObject() });
+      navigator.sendBeacon("/api/designs", new Blob([payload], { type:"application/json" }));
+    } catch(e){}
+  });
 
   function renderSrv(){
     var note = $("srvNote"), lock = $("srvLock"), main = $("srvMain");
@@ -1141,6 +1320,7 @@
                               : "This layout is not on the server yet. Give it a name and save.";
     main.hidden = false;
     $("srvName").value = doc.name || state.title;
+    $("srvAuto").checked = auto.on;
     loadList();
   }
 
@@ -1178,6 +1358,7 @@
     api("/api/designs?id=" + encodeURIComponent(id)).then(function(d){
       try {
         applyExport(d.design.data);
+        auto.dirty = false; auto.at = clockNow();
         setDoc(d.design.id, d.design.name);
         renderSrv(); toast("Opened “" + d.design.name + "”");
       } catch(e){ toast("That saved design could not be read"); }
@@ -1185,15 +1366,30 @@
   }
   function saveDesign(asNew){
     var name = ($("srvName").value || "").trim() || state.title || "Untitled layout";
-    var payload = { id: asNew ? null : doc.id, name: name, data: exportObject() };
-    api("/api/designs", { method:"POST", body: JSON.stringify(payload) }).then(function(d){
-      setDoc(d.id, d.name);
+    if (asNew) setDoc(null, name);
+    else doc.name = name;
+    pushSave(name).then(function(){
       renderSrv(); toast(asNew ? "Saved as a new design" : "Design saved");
     }, function(err){
-      if (err.status === 401){ srv.authed = false; renderSrv(); toast("Unlock with the password first"); }
-      else toast(err.message);
+      if (err.status === 401){ renderSrv(); toast("Unlock with the password first"); }
+      else toast(err.message || "Could not save");
     });
   }
+
+  // name it, then save — the button in the header
+  $("saveBtn").addEventListener("click", function(){
+    if (!srv.reachable || !srv.storage || !srv.authed){
+      $("designsBtn").click();
+      return;
+    }
+    var name = prompt("Name this design — it opens under this name on any computer:",
+                      doc.name || state.title || "Untitled layout");
+    if (name === null) return;
+    name = name.trim(); if (!name) return;
+    doc.name = name;
+    pushSave(name).then(function(){ toast("Saved as “" + name + "”"); },
+                        function(err){ toast(err.message || "Could not save"); });
+  });
   function deleteDesign(id){
     if (!confirm("Delete this saved design from the server?")) return;
     api("/api/designs?id=" + encodeURIComponent(id), { method:"DELETE" }).then(function(){
@@ -1211,10 +1407,16 @@
     var pass = $("srvPass").value;
     if (!pass) return;
     api("/api/auth", { method:"POST", body: JSON.stringify({ password: pass }) }).then(function(){
-      srv.authed = true; renderSrv(); toast("Unlocked");
+      srv.authed = true; renderSrv(); showDoc(); toast("Unlocked");
+      if (auto.dirty || !doc.id) markDirty();
     }, function(err){ toast(err.message || "Wrong password"); });
   });
   $("srvPass").addEventListener("keydown", function(e){ if (e.key === "Enter") $("srvUnlock").click(); });
+  $("srvAuto").addEventListener("change", function(){
+    auto.on = this.checked; state.autoSave = auto.on; persist();
+    toast(auto.on ? "Changes will keep saving themselves" : "Autosave off — use Save design");
+    if (auto.on && auto.dirty) markDirty();
+  });
   $("srvSave").addEventListener("click", function(){ saveDesign(false); });
   $("srvSaveAs").addEventListener("click", function(){ saveDesign(true); });
   $("srvNew").addEventListener("click", function(){
@@ -1237,6 +1439,8 @@
   $("title").value = state.title; $("cols").value = state.cols;
   $("rows").value = state.rows; $("zoom").value = state.cell; $("meters").value = state.meters;
   doc.id = state.docId || null; doc.name = state.docName || "";
+  $("autoColor").checked = state.autoColor !== false;
+  auto.on = state.autoSave !== false;
   showDoc(); hint(); renderTypes(); draw();
   refreshStatus();
 })();

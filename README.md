@@ -25,6 +25,17 @@ Pick a type in the left panel, then drag on the grid.
 Click anything to select it. Then:
 
 - **Move** — drag the selected item anywhere it fits.
+- **Colour** — with "Give every new stall its own colour" ticked, each stall
+  placed gets a fresh bright colour, walking the colour wheel by the golden angle
+  so neighbouring stalls never look alike. Untick it and stalls take their type's
+  colour instead. Any single stall can be recoloured in the panel, and
+  "Use type colour" clears that override. Adding a new type also starts with a
+  fresh bright colour rather than the same orange every time.
+- **Facing** — each stall shows which side it opens onto as a thick bar along
+  that edge, with an arrow on the larger stalls. Change it in the panel
+  (Up / Down / Left / Right) or press R to turn the selected stall. A stall type
+  carries a default facing, so a whole row stamped from one type opens the same
+  way. The JSON export records it as `"facing": "up" | "down" | "left" | "right"`.
 - **Selecting** — clicking a stall always selects it. Clicking an area or pathway
   selects it while that kind is the active type; with a stall type active the
   click places a stall inside the area instead.
@@ -47,6 +58,16 @@ Work is kept in the browser, so a refresh does not lose the layout.
 The app keeps a working copy in the browser, and can also store named designs on
 the server so they open from any machine.
 
+- **Save design** in the header names the layout and stores it. That name is how
+  it appears on any other computer — open the site there, unlock, and pick it
+  from the list.
+- After the first save, changes keep saving themselves a few seconds after you
+  stop working, and once more if you close the tab. The header shows the state:
+  saving…, saved 18:22, unsaved changes, or "on this computer only" when the
+  server is not reachable. Turn it off with the checkbox in the panel if you
+  prefer saving by hand.
+- If you draw before naming anything, the first automatic save files it as
+  "Draft 20 Sep 18:22" — rename it any time with Save design.
 - **Designs** button in the header opens the panel.
 - Reading the list and opening a design is open to anyone with the link.
 - Creating, saving, renaming and deleting need the password.
