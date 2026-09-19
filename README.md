@@ -27,6 +27,11 @@ Pick a type in the left panel, then drag on the grid.
 - **Barricades** — a striped line rather than a box. Drag sideways for a
   horizontal barricade, downward for a vertical one.
 
+**Select & edit mode** — clicking the empty space around the board, pressing
+Escape, or the "Select & edit" button at the top of the type list drops out of
+drawing. The cursor goes back to a normal arrow and clicks only pick things up:
+nothing new is created until you choose a type again.
+
 Click anything to select it. Then:
 
 - **Several at once** — shift-click adds items to the selection, shift-drag on
@@ -53,7 +58,10 @@ Click anything to select it. Then:
   click places a stall inside the area instead.
 - **Resize** — drag the square handles on its edges and corners. A barricade has
   a handle at each end to change its length.
-- **Number** — the number is edited on the stall itself. Place a stall or click
+- **Number** — a stall you just placed has its number selected, so typing
+  replaces it straight away. Clicking an *existing* stall puts the caret at the
+  end instead of selecting, so a stray keystroke can never wipe a number that is
+  already set. The number is edited on the stall itself. Place a stall or click
   an existing one and the number is selected ready to overtype; what you type
   appears on the stall as you go. Enter keeps it, Escape puts the old one back.
   The panel field stays in sync either way, and the box never blocks dragging.

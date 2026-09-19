@@ -139,6 +139,11 @@
 
     <div class="block">
       <h2>Draw with</h2>
+      <button class="ty" id="selectMode" style="margin-bottom:9px">
+        <span class="sw" style="background:transparent;border-style:dashed"></span>
+        <span class="nm">Select &amp; edit</span>
+        <span class="ct">Esc</span>
+      </button>
       <div id="typeGroups"></div>
       <div class="btns" style="margin-top:9px">
         <button id="addType">Add type</button>
@@ -210,7 +215,7 @@
     </div>
   </aside>
 
-  <section class="stage">
+  <section class="stage" id="stage">
     <div class="stageInner"><div class="cwrap"><canvas id="cv"></canvas><input id="inlineLabel" class="inlineEdit" hidden></div></div>
   </section>
 </main>
@@ -320,7 +325,7 @@
       {id:"t8", name:"Walkway",    kind:"path",  prefix:"",  color:"#D8D4CC", rate:null},
       {id:"t9", name:"Barricade",  kind:"barricade", prefix:"", color:"#D9822B", rate:null}
     ],
-    activeType:"t1", sizeIx:0,
+    activeType:"t1", sizeIx:0, drawMode:true,
     autoColor:false, hue:24,
     items:[]
   };
@@ -742,7 +747,7 @@
   var hover = null;
   function setHover(p){
     var type = typeById(state.activeType);
-    if (type.kind === "barricade" || !fixedSize(type)){
+    if (!state.drawMode || type.kind === "barricade" || !fixedSize(type)){
       if (hover){ hover = null; overlay(); }
       return;
     }
@@ -835,6 +840,7 @@
   // a plain click selects a stall, or an area/pathway while that kind is the active type;
   // clicking an area with a stall type active places a stall inside it instead
   function selectableHit(hit, type){
+    if (!state.drawMode) return true;        // in select mode anything can be picked
     var k = kindOf(hit);
     return k === "stall" || k === type.kind;
   }
@@ -898,6 +904,10 @@
       return;
     }
 
+    if (!state.drawMode){                    // select mode: never create, just clear
+      select(null); draw(); drag = null; return;
+    }
+
     // a fixed-size stall appears on the press itself — dragging then extends the row
     if (fixedSize(type)){
       var box = (currentSize(type) || {w:1,h:1});
@@ -909,7 +919,7 @@
       snapshot();
       var made = makeItem(type, first);
       state.items.push(made);
-      select(made, type.kind === "stall");
+      select(made, type.kind === "stall" ? "new" : false);
       drag = { mode:"tile", start:p, typeId: type.id, made:[made], moved:false };
       save(); draw();
       return;
@@ -1036,7 +1046,7 @@
                       color: freshColor(type) };
           state.items.push(one); made = one;
         });
-        select(made, d.tiles.length === 1 && type.kind === "stall"); save(); draw();
+        select(made, (d.tiles.length === 1 && type.kind === "stall") ? "new" : false); save(); draw();
         if (d.tiles.length > 1) toast("Placed " + d.tiles.length + " × " + type.name.toLowerCase());
         return;
       }
@@ -1049,7 +1059,7 @@
       var item = { id: uid(), type: type.id, x:pi.x, y:pi.y, w:pi.w, h:pi.h,
                    z: BASE_Z[type.kind], label: nextLabel(type), face: type.face || "n",
                    color: freshColor(type) };
-      state.items.push(item); select(item, type.kind === "stall"); save(); draw(); return;
+      state.items.push(item); select(item, type.kind === "stall" ? "new" : false); save(); draw(); return;
     }
   }
 
@@ -1072,7 +1082,7 @@
         setPicks(d.made);
         toast("Placed " + d.made.length + " \u00D7 " + typeById(d.typeId).name.toLowerCase());
       } else if (d.made.length === 1){
-        select(d.made[0], kindOf(d.made[0]) === "stall");
+        select(d.made[0], kindOf(d.made[0]) === "stall" ? "new" : false);
       }
       save(); draw(); return;
     }
@@ -1124,13 +1134,17 @@
       e.preventDefault(); undo(); return;
     }
     if (/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
-    if (!sel) return;
+    if (e.key === "Escape"){
+      select(null);
+      if (state.drawMode) setMode(false); else draw();
+      return;
+    }
     if (e.key === "a" && (e.ctrlKey || e.metaKey)){
       e.preventDefault(); setPicks(state.items.slice());
       toast(picks.length + " items selected"); draw(); return;
     }
+    if (!sel) return;
     if (e.key === "Delete" || e.key === "Backspace"){ e.preventDefault(); removeSel(); return; }
-    if (e.key === "Escape"){ select(null); draw(); return; }
     if (e.key === "r" || e.key === "R"){
       if (kindOf(sel) === "stall"){
         e.preventDefault();
@@ -1234,7 +1248,7 @@
     $("zVal").textContent = item.z;
     inl.value = item.label || "";
     placeInline();
-    if (focusLabel) editLabel();
+    if (focusLabel) editLabel(focusLabel);
   }
   var inl = $("inlineLabel"), inlWas = "", editingId = null;
   // the box sits exactly over the stall, so typing happens on the stall itself
@@ -1255,11 +1269,18 @@
     inl.style.color = textColor(fill);
     inl.style.caretColor = textColor(fill);
   }
-  function editLabel(){
+  // "new" selects the whole number so typing replaces it; otherwise the caret
+  // just sits at the end, so clicking a stall can never wipe its number
+  function editLabel(mode){
     if (inl.hidden || !sel) return;
     inlWas = sel.label || "";
     editingId = sel.id;
-    inl.focus(); inl.select();
+    inl.focus();
+    if (mode === "new") inl.select();
+    else {
+      var n = inl.value.length;
+      try { inl.setSelectionRange(n, n); } catch(e){}
+    }
     draw();
   }
   function endEdit(){
@@ -1449,7 +1470,8 @@
       if (!list.length) return;
       html += '<div class="group"><p class="gh">'+KINDS[kind]+'</p><div class="types">';
       list.forEach(function(t){
-        var zs = sizesOf(t), cur = currentSize(t), active = (t.id === state.activeType);
+        var zs = sizesOf(t), cur = currentSize(t);
+        var active = (t.id === state.activeType) && state.drawMode;
         html += '<button class="ty" data-id="'+t.id+'" aria-pressed="'+active+'">' +
                 '<span class="sw" style="background:'+t.color+'"></span>' +
                 '<span class="nm">'+esc(t.name)+'</span>' +
@@ -1468,16 +1490,36 @@
     Array.prototype.forEach.call($("typeGroups").querySelectorAll(".ty"), function(btn){
       btn.addEventListener("click", function(){
         if (state.activeType !== btn.dataset.id) state.sizeIx = 0;
-        state.activeType = btn.dataset.id; renderTypes(); hint(); save();
+        state.activeType = btn.dataset.id;
+        setMode(true);
       });
     });
     Array.prototype.forEach.call($("typeGroups").querySelectorAll(".szrow button"), function(btn){
       btn.addEventListener("click", function(){
-        state.sizeIx = Number(btn.dataset.ix) || 0; renderTypes(); hint(); save();
+        state.sizeIx = Number(btn.dataset.ix) || 0;
+        setMode(true);
       });
     });
   }
+  function setMode(drawing){
+    state.drawMode = !!drawing;
+    if (!state.drawMode){ hover = null; }
+    cv.style.cursor = state.drawMode ? "crosshair" : "default";
+    $("selectMode").setAttribute("aria-pressed", String(!state.drawMode));
+    renderTypes(); hint(); save(); draw();
+  }
+  $("selectMode").addEventListener("click", function(){ setMode(false); });
+
+  // clicking the empty space around the board leaves drawing mode
+  $("stage").addEventListener("pointerdown", function(e){
+    if (e.target !== cv && state.drawMode) setMode(false);
+  });
+
   function hint(){
+    if (!state.drawMode){
+      $("drawHint").textContent = "Select mode — click a stall to pick it and edit its number, drag to move it. Choose a type above to start drawing again.";
+      return;
+    }
     var t = typeById(state.activeType), k = t.kind;
     if (fixedSize(t)){
       var z = currentSize(t);
@@ -2079,6 +2121,9 @@
   $("title").value = state.title; $("cols").value = state.cols;
   $("rows").value = state.rows; $("zoom").value = state.cell; $("meters").value = state.meters;
   doc.id = state.docId || null; doc.name = state.docName || "";
+  if (typeof state.drawMode !== "boolean") state.drawMode = true;
+  cv.style.cursor = state.drawMode ? "crosshair" : "default";
+  $("selectMode").setAttribute("aria-pressed", String(!state.drawMode));
   $("autoColor").checked = state.autoColor !== false;
   auto.on = state.autoSave !== false;
   normalizeTypes();
