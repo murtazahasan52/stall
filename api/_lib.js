@@ -1,16 +1,11 @@
-// Shared helpers for the design API. Files starting with _ are not routed.
+// Password session helpers. Storage lives in _store.js.
+// Files starting with _ are not routed as endpoints.
 import crypto from "node:crypto";
-import { put, list, del } from "@vercel/blob";
 
 export const PASSWORD = process.env.DESIGN_PASSWORD || "roar5253";
 const SECRET = process.env.SESSION_SECRET || "roar-layout-" + PASSWORD;
 export const COOKIE = "roar_session";
-export const PREFIX = "designs/";
-export const INDEX = PREFIX + "_index.json";
 
-export function storageReady(){ return !!process.env.BLOB_READ_WRITE_TOKEN; }
-
-/* ---------- session ---------- */
 function sign(value){
   return crypto.createHmac("sha256", SECRET).update(String(value)).digest("hex").slice(0, 32);
 }
@@ -45,43 +40,10 @@ export function isAuthed(req){ return validToken(readCookie(req, COOKIE)); }
 export function setSession(res, token, maxAge){
   const bits = [
     COOKIE + "=" + encodeURIComponent(token),
-    "Path=/", "HttpOnly", "SameSite=Lax",
-    "Max-Age=" + maxAge
+    "Path=/", "HttpOnly", "SameSite=Lax", "Max-Age=" + maxAge
   ];
   if (process.env.VERCEL) bits.push("Secure");
   res.setHeader("Set-Cookie", bits.join("; "));
-}
-
-/* ---------- blob storage ---------- */
-export async function readJson(pathname){
-  const { blobs } = await list({ prefix: pathname, limit: 1 });
-  const hit = blobs.find(b => b.pathname === pathname);
-  if (!hit) return null;
-  const r = await fetch(hit.url + "?ts=" + Date.now(), { cache: "no-store" });
-  if (!r.ok) return null;
-  return r.json();
-}
-export async function writeJson(pathname, value){
-  await put(pathname, JSON.stringify(value), {
-    access: "public",
-    contentType: "application/json",
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    cacheControlMaxAge: 0
-  });
-}
-export async function removeBlob(pathname){
-  const { blobs } = await list({ prefix: pathname, limit: 1 });
-  const hit = blobs.find(b => b.pathname === pathname);
-  if (hit) await del(hit.url);
-}
-export async function readIndex(){
-  const idx = await readJson(INDEX);
-  return Array.isArray(idx) ? idx : [];
-}
-export async function writeIndex(rows){
-  rows.sort((a, b) => String(b.updated).localeCompare(String(a.updated)));
-  await writeJson(INDEX, rows);
 }
 export async function body(req){
   if (req.body && typeof req.body === "object") return req.body;

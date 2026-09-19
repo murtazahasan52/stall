@@ -39,7 +39,9 @@
   .stage{flex:1;overflow:auto;padding:20px}
   .stageInner{display:inline-block;background:#fff;border:1px solid var(--line);
     border-radius:10px;padding:10px;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+  .cwrap{position:relative;display:inline-block;line-height:0}
   canvas{display:block;touch-action:none;cursor:crosshair;border-radius:4px}
+  #ov{position:absolute;left:0;top:0;pointer-events:none;background:transparent}
   h2{font-size:12px;font-weight:600;color:var(--muted);margin:0 0 8px;letter-spacing:.02em}
   .block{margin-bottom:20px}
   .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -202,7 +204,7 @@
   </aside>
 
   <section class="stage">
-    <div class="stageInner"><canvas id="cv"></canvas></div>
+    <div class="stageInner"><div class="cwrap"><canvas id="cv"></canvas><canvas id="ov"></canvas></div></div>
   </section>
 </main>
 
@@ -525,24 +527,31 @@
     g.restore();
   }
 
-  function paint(g, cs, opts){
-    opts = opts || {};
+  function paintScene(g, cs){
     var W = state.cols*cs, H = state.rows*cs, x, y;
     g.fillStyle = "#FFFFFF"; g.fillRect(0,0,W,H);
+    // two batched paths instead of one stroke per line — matters on a 140 x 100 board
     g.lineWidth = 1;
+    g.beginPath();
     for (x=0;x<=state.cols;x++){
-      g.strokeStyle = (x%5===0) ? "rgba(7,15,33,.22)" : "rgba(7,15,33,.09)";
-      g.beginPath(); g.moveTo(Math.round(x*cs)+.5,0); g.lineTo(Math.round(x*cs)+.5,H); g.stroke();
+      if (x%5===0) continue;
+      g.moveTo(Math.round(x*cs)+.5, 0); g.lineTo(Math.round(x*cs)+.5, H);
     }
     for (y=0;y<=state.rows;y++){
-      g.strokeStyle = (y%5===0) ? "rgba(7,15,33,.22)" : "rgba(7,15,33,.09)";
-      g.beginPath(); g.moveTo(0,Math.round(y*cs)+.5); g.lineTo(W,Math.round(y*cs)+.5); g.stroke();
+      if (y%5===0) continue;
+      g.moveTo(0, Math.round(y*cs)+.5); g.lineTo(W, Math.round(y*cs)+.5);
     }
+    g.strokeStyle = "rgba(7,15,33,.09)"; g.stroke();
+
+    g.beginPath();
+    for (x=0;x<=state.cols;x+=5){ g.moveTo(Math.round(x*cs)+.5, 0); g.lineTo(Math.round(x*cs)+.5, H); }
+    for (y=0;y<=state.rows;y+=5){ g.moveTo(0, Math.round(y*cs)+.5); g.lineTo(W, Math.round(y*cs)+.5); }
+    g.strokeStyle = "rgba(7,15,33,.22)"; g.stroke();
 
     byZ().forEach(function(it){ drawItem(g, it, cs); });
+  }
 
-    if (opts.noSel) return;
-
+  function paintOverlay(g, cs){
     if (sel && state.items.indexOf(sel) !== -1){
       var rr = screenRect(sel, cs);
       g.strokeStyle = "#070F21"; g.lineWidth = 2.5; g.setLineDash([]);
@@ -554,6 +563,17 @@
         g.fillRect(p.x-k/2, p.y-k/2, k, k);
         g.strokeRect(p.x-k/2, p.y-k/2, k, k);
       });
+    }
+
+    if (hover && !drag){
+      var hok = fits(typeById(state.activeType).kind, hover, null);
+      g.setLineDash([4,3]);
+      g.fillStyle = hok ? "rgba(233,160,49,.16)" : "rgba(192,57,43,.14)";
+      g.fillRect(hover.x*cs, hover.y*cs, hover.w*cs, hover.h*cs);
+      g.strokeStyle = hok ? "rgba(184,116,15,.75)" : "rgba(192,57,43,.7)";
+      g.lineWidth = 1.5;
+      g.strokeRect(hover.x*cs+1, hover.y*cs+1, hover.w*cs-2, hover.h*cs-2);
+      g.setLineDash([]);
     }
 
     if (drag && drag.preview && drag.tiles){
@@ -582,13 +602,44 @@
     }
   }
 
-  function draw(){
+  // for the PNG / PDF export, which wants everything on one context
+  function paint(g, cs){ paintScene(g, cs); }
+
+  var ov = $("ov"), octx = ov.getContext("2d");
+  var sceneDirty = true, curDPR = DPR, rafId = 0;
+
+  function render(withStats){
     var cs = state.cell, W = state.cols*cs, H = state.rows*cs;
-    cv.style.width = W+"px"; cv.style.height = H+"px";
-    cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
-    ctx.setTransform(DPR,0,0,DPR,0,0);
-    paint(ctx, cs, {});
-    renderStats();
+    // a very large board at 2x costs more memory than it is worth
+    var want = (W * H > 3200000) ? 1 : DPR;
+    var px = Math.round(W*want), py = Math.round(H*want);
+
+    if (cv.width !== px || cv.height !== py || want !== curDPR){
+      curDPR = want;
+      cv.style.width = W+"px"; cv.style.height = H+"px";
+      cv.width = px; cv.height = py;
+      ov.style.width = W+"px"; ov.style.height = H+"px";
+      ov.width = px; ov.height = py;
+      sceneDirty = true;
+    }
+    if (sceneDirty){
+      ctx.setTransform(curDPR,0,0,curDPR,0,0);
+      paintScene(ctx, cs);
+      sceneDirty = false;
+    }
+    octx.setTransform(curDPR,0,0,curDPR,0,0);
+    octx.clearRect(0, 0, W, H);
+    paintOverlay(octx, cs);
+    if (withStats) renderStats();
+  }
+
+  // the scene changed
+  function draw(){ sceneDirty = true; if (rafId){ cancelAnimationFrame(rafId); rafId = 0; } render(true); }
+
+  // only the cursor moved — repaint the thin overlay, at most once per frame
+  function overlay(){
+    if (rafId) return;
+    rafId = requestAnimationFrame(function(){ rafId = 0; render(false); });
   }
 
   /* ---------- pointer ---------- */
@@ -602,7 +653,7 @@
   }
   function handleAt(p){
     if (!sel) return null;
-    var pts = handlePoints(sel, state.cell), tol = Math.max(7, state.cell*0.34)/2 + 3, best = null;
+    var pts = handlePoints(sel, state.cell), tol = Math.max(6, state.cell*0.30)/2, best = null;
     Object.keys(pts).forEach(function(key){
       var q = pts[key];
       if (Math.abs(p.px-q.x) <= tol && Math.abs(p.py-q.y) <= tol) best = key;
@@ -621,6 +672,20 @@
     return null;
   }
   function clone(it){ return JSON.parse(JSON.stringify(it)); }
+
+  var hover = null;
+  function setHover(p){
+    var type = typeById(state.activeType);
+    if (type.kind === "barricade" || !fixedSize(type)){
+      if (hover){ hover = null; overlay(); }
+      return;
+    }
+    var z = currentSize(type);
+    if (hover && hover.x === p.x && hover.y === p.y && hover.w === z.w && hover.h === z.h) return;
+    hover = { x:p.x, y:p.y, w:z.w, h:z.h };
+    overlay();
+  }
+  function clearHover(){ if (hover){ hover = null; overlay(); } }
 
   // types with a fixed box size stamp that size instead of taking the dragged size
   function tilesFor(r, type){
@@ -710,14 +775,18 @@
              rectRaw:{ x:p.x, y:p.y, w:1, h:1 },
              previewItem:{ x:p.x, y:p.y, w:1, h:1 } };
     updateDrawPreview();
-    draw();
+    overlay();
   });
 
   cv.addEventListener("pointermove", function(e){
-    if (!drag) return;
     var p = pos(e);
     p.x = Math.max(0, Math.min(state.cols-1, p.x));
     p.y = Math.max(0, Math.min(state.rows-1, p.y));
+
+    if (!drag){ setHover(p); return; }
+
+    if (Math.abs(p.px - drag.start.px) > 4 || Math.abs(p.py - drag.start.py) > 4 ||
+        p.x !== drag.start.x || p.y !== drag.start.y) drag.moved = true;
 
     if (drag.mode === "draw"){
       drag.rectRaw = rectOf(drag.start, p);
@@ -756,18 +825,15 @@
       }
       drag.previewItem = n; drag.preview = true;
     }
-    draw();
+    overlay();
   });
 
-  cv.addEventListener("pointerup", function(){
-    if (!drag) return;
-    var d = drag; drag = null;
-
-    if (d.mode === "draw"){
+  function commitDraw(d){
+    {
       var type = typeById(state.activeType), pi = d.previewItem, r = d.rectRaw;
       var single = (r.w === 1 && r.h === 1);
       if (single && d.hit && type.kind !== "barricade" && selectableHit(d.hit, type)){
-        select(d.hit); draw(); return;
+        select(d.hit); overlay(); return;
       }
       if (type.kind === "barricade"){
         var bar = { id: uid(), type: type.id, label: type.name, z: BASE_Z.barricade,
@@ -801,7 +867,25 @@
                    color: freshColor(type) };
       state.items.push(item); select(item); save(); draw(); return;
     }
+  }
 
+  // a press that never moved is a click: select what is under it, or drop a stall there
+  function clickAt(p){
+    drag = { mode:"draw", start:p, hit: hitAt(p), preview:false, ok:true,
+             rectRaw:{ x:p.x, y:p.y, w:1, h:1 },
+             previewItem:{ x:p.x, y:p.y, w:1, h:1 } };
+    updateDrawPreview();
+    var d = drag; drag = null;
+    commitDraw(d);
+  }
+
+  cv.addEventListener("pointerup", function(){
+    if (!drag) return;
+    var d = drag; drag = null;
+
+    if (d.mode === "draw"){ commitDraw(d); return; }
+
+    if (!d.moved){ clickAt(d.start); return; }   // grabbed a handle but never dragged
     if (!sel){ draw(); return; }
     if (!d.ok){ toast(d.mode === "move" ? "Cannot drop it there" : "Cannot resize it into that space"); draw(); return; }
     var n = d.previewItem;
@@ -809,7 +893,10 @@
     if (n.orient) sel.len = n.len; else { sel.w = n.w; sel.h = n.h; }
     select(sel); save(); draw();
   });
-  cv.addEventListener("pointercancel", function(){ drag = null; draw(); });
+  cv.addEventListener("pointercancel", function(){ drag = null; overlay(); });
+  cv.addEventListener("pointerleave", function(){ clearHover(); });
+  // never leave a preview stuck on screen if the release happens off-canvas
+  window.addEventListener("pointerup", function(){ if (drag){ drag = null; overlay(); } });
 
   document.addEventListener("keydown", function(e){
     if (/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
@@ -1203,7 +1290,7 @@
     g.fillText(itemsOf("stall").length + " stalls · " + itemsOf("zone").length + " areas · grid " +
                state.cols + " × " + state.rows + " · 1 box = " + state.meters + " m",
                pad, pad + 40*scale);
-    g.save(); g.translate(pad, pad + titleH); paint(g, cs, {noSel:true}); g.restore();
+    g.save(); g.translate(pad, pad + titleH); paintScene(g, cs); g.restore();
 
     var ly = pad + titleH + gridH + 22*scale;
     used.forEach(function(entry, i){
@@ -1348,7 +1435,7 @@
 
   /* ---------- designs on the server ---------- */
   var doc = { id:null, name:"" };
-  var srv = { reachable:false, storage:false, authed:false };
+  var srv = { reachable:false, storage:false, authed:false, error:"" };
   var auto = { on:true, dirty:false, busy:false, timer:null, at:"" };
 
   function clockNow(){
@@ -1417,6 +1504,7 @@
   function refreshStatus(){
     return api("/api/auth").then(function(d){
       srv.reachable = true; srv.storage = !!d.storage; srv.authed = !!d.authed;
+      srv.error = d.storageError || "";
       showDoc();
       if (srv.authed && auto.on && auto.dirty) markDirty();
     }, function(){
@@ -1440,7 +1528,8 @@
       return;
     }
     if (!srv.storage){
-      note.textContent = "Blob storage is not connected yet. In the Vercel dashboard open Storage, create a Blob store, link it to this project and redeploy.";
+      note.textContent = srv.error ||
+        "No database is connected to this project. In Vercel open Storage, create a Neon Postgres database, then redeploy.";
       return;
     }
     if (!srv.authed){

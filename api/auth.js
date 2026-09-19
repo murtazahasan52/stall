@@ -1,19 +1,27 @@
-import { samePassword, makeToken, setSession, isAuthed, storageReady, body, COOKIE } from "./_lib.js";
+import { samePassword, makeToken, setSession, isAuthed, body } from "./_lib.js";
+import { health } from "./_store.js";
 
 export default async function handler(req, res){
   if (req.method === "GET"){
-    return res.status(200).json({ ok: true, authed: isAuthed(req), storage: storageReady() });
+    const store = await health();
+    return res.status(200).json({
+      ok: true, authed: isAuthed(req),
+      storage: store.ok, backend: store.backend || null, storageError: store.error || null
+    });
   }
 
   if (req.method === "POST"){
     const { password } = await body(req);
     if (!samePassword(password)){
-      // slow down guessing a little
       await new Promise(r => setTimeout(r, 600));
       return res.status(401).json({ ok: false, error: "Wrong password" });
     }
     setSession(res, makeToken(30), 30 * 86400);
-    return res.status(200).json({ ok: true, authed: true, storage: storageReady() });
+    const store = await health();
+    return res.status(200).json({
+      ok: true, authed: true,
+      storage: store.ok, backend: store.backend || null, storageError: store.error || null
+    });
   }
 
   if (req.method === "DELETE"){

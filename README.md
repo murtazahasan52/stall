@@ -81,9 +81,12 @@ the server so they open from any machine.
 
 ### Set it up on Vercel (one time)
 
-1. **Blob store** — in the Vercel dashboard open the project, go to Storage,
-   create a Blob store and connect it to this project. Vercel adds
-   `BLOB_READ_WRITE_TOKEN` for you.
+1. **Database** — open the project in Vercel, go to the **Storage** tab and
+   create a **Neon Postgres** database (Create Database, pick Neon, Free plan is
+   enough). Vercel injects `DATABASE_URL` into the project. The app creates its
+   own `designs` table on first use — no migration to run.
+   A Vercel **Blob** store works too; the app uses whichever it finds, Postgres
+   first.
 2. **Password** — under Settings, Environment Variables add:
 
    | Name | Value |
@@ -93,11 +96,24 @@ the server so they open from any machine.
 
    If `DESIGN_PASSWORD` is not set the app falls back to `roar5253`, which is in
    the source code — set the variable so the real password is not in the repo.
-3. Redeploy.
+3. **Redeploy.** A deployment built before the database existed has none of
+   these variables, which is what "no database is connected" means.
 
-Until a Blob store is connected the Designs panel says so and everything else
+Until a database is connected the Designs panel says so and everything else
 keeps working. Running the folder locally without `vercel dev` also works — the
 panel just reports that the server is not available.
+
+### Table
+
+```sql
+designs (
+  id      text primary key,
+  name    text not null,
+  updated timestamptz not null default now(),
+  stalls  integer, areas integer,
+  data    jsonb          -- the same shape as the JSON export
+)
+```
 
 ### API
 
@@ -135,8 +151,9 @@ no build command, output directory `.`.
 index.html       the whole app
 api/auth.js      password unlock / lock
 api/designs.js   list, open, save, delete designs
-api/_lib.js      session + Blob storage helpers
-package.json     one dependency, @vercel/blob
+api/_store.js    Neon Postgres storage (Vercel Blob as fallback)
+api/_lib.js      password session helpers
+package.json     dependencies
 vercel.json      caching + clean URLs
 README.md        this file
 ```
