@@ -41,7 +41,6 @@
     border-radius:10px;padding:10px;box-shadow:0 1px 2px rgba(0,0,0,.06)}
   .cwrap{position:relative;display:inline-block;line-height:0}
   canvas{display:block;touch-action:none;cursor:crosshair;border-radius:4px}
-  #ov{position:absolute;left:0;top:0;pointer-events:none;background:transparent}
   .inlineEdit{position:absolute;z-index:5;pointer-events:none;
     font-family:"Segoe UI",Roboto,system-ui,sans-serif;font-weight:600;
     text-align:center;padding:0;margin:0;border:0;background:transparent;
@@ -203,6 +202,7 @@
       <h2>Layout</h2>
       <div class="btns">
         <button id="undoBtn">Undo</button>
+        <button id="repairBtn">Repair layout</button>
         <button id="renumBtn">Renumber stalls</button>
         <button id="flatBtn">One colour per category</button>
         <button class="danger" id="clearBtn">Clear all</button>
@@ -211,7 +211,7 @@
   </aside>
 
   <section class="stage">
-    <div class="stageInner"><div class="cwrap"><canvas id="cv"></canvas><canvas id="ov"></canvas><input id="inlineLabel" class="inlineEdit" hidden></div></div>
+    <div class="stageInner"><div class="cwrap"><canvas id="cv"></canvas><input id="inlineLabel" class="inlineEdit" hidden></div></div>
   </section>
 </main>
 
@@ -379,13 +379,23 @@
   }
   // walks the colour wheel by the golden angle, so consecutive colours never look alike
   function nextBrightColor(){
-    var h = (typeof state.hue === "number" ? state.hue : 24) % 360;
+    var h = Number(state.hue);
+    if (!isFinite(h)) h = 24;
+    h = ((h % 360) + 360) % 360;
     state.hue = (h + GOLDEN) % 360;
     var light = 0.52 + ((Math.round(h) % 3) * 0.045);
-    return hslHex(h, 0.72, light);
+    var c = hslHex(h, 0.72, light);
+    return okColor(c) ? c : "#E9A031";
   }
 
+  function okColor(c){ return typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c); }
+  function fillOf(it, t){
+    if (okColor(it && it.color)) return it.color;
+    if (okColor(t && t.color)) return t.color;
+    return "#9AA0AA";                       // never invisible
+  }
   function textColor(hex){
+    if (!okColor(hex)) return "#101010";
     var c = (hex||"#ffffff").replace("#","");
     if (c.length===3) c = c[0]+c[0]+c[1]+c[1]+c[2]+c[2];
     var r=parseInt(c.substr(0,2),16), g=parseInt(c.substr(2,2),16), b=parseInt(c.substr(4,2),16);
@@ -443,9 +453,9 @@
   }
 
   function drawItem(g, it, cs){
-    var t = typeById(it.type), kind = t.kind;
+    var t = typeById(it.type), kind = it.orient ? "barricade" : t.kind;
     if (kind === "path"){
-      g.fillStyle = t.color; g.globalAlpha = .72;
+      g.fillStyle = fillOf(it, t); g.globalAlpha = .72;
       g.fillRect(it.x*cs, it.y*cs, it.w*cs, it.h*cs); g.globalAlpha = 1;
       g.save(); g.beginPath(); g.rect(it.x*cs, it.y*cs, it.w*cs, it.h*cs); g.clip();
       g.strokeStyle = "rgba(7,15,33,.14)"; g.lineWidth = 1;
@@ -457,20 +467,25 @@
       g.strokeRect(it.x*cs+.5, it.y*cs+.5, it.w*cs-1, it.h*cs-1);
       labelBlock(g, it, cs, true);
     } else if (kind === "zone"){
-      g.fillStyle = t.color; g.globalAlpha = .55;
+      g.fillStyle = fillOf(it, t); g.globalAlpha = .55;
       g.fillRect(it.x*cs, it.y*cs, it.w*cs, it.h*cs); g.globalAlpha = 1;
       g.setLineDash([cs*0.35, cs*0.22]);
       g.strokeStyle = "rgba(7,15,33,.45)"; g.lineWidth = 1.6;
       g.strokeRect(it.x*cs+1, it.y*cs+1, it.w*cs-2, it.h*cs-2);
       g.setLineDash([]);
       labelBlock(g, it, cs, false);
-    } else if (kind === "stall"){
-      var px=it.x*cs, py=it.y*cs, pw=it.w*cs, ph=it.h*cs, fill = it.color || t.color;
+    } else if (kind !== "barricade"){
+      var px=it.x*cs, py=it.y*cs, pw=it.w*cs, ph=it.h*cs, fill = fillOf(it, t);
       g.fillStyle = fill; g.globalAlpha = .92;
       g.fillRect(px+1, py+1, pw-2, ph-2); g.globalAlpha = 1;
       g.strokeStyle = "rgba(7,15,33,.55)"; g.lineWidth = 1.2;
       g.strokeRect(px+1.5, py+1.5, pw-3, ph-3);
       drawFace(g, it, px, py, pw, ph, textColor(fill));
+      if (!(pw > 0) || !(ph > 0)){          // nothing is ever drawn as empty space
+        g.strokeStyle = "#C0392B"; g.lineWidth = 2; g.setLineDash([4,3]);
+        g.strokeRect(px+1, py+1, Math.max(pw,cs)-2, Math.max(ph,cs)-2);
+        g.setLineDash([]);
+      }
       if (it.id !== editingId){
         var size = Math.min(Math.max(8, Math.min(pw,ph)*0.34), ph*0.5, pw*0.42);
         g.fillStyle = textColor(fill);
@@ -558,7 +573,21 @@
     for (y=0;y<=state.rows;y+=5){ g.moveTo(0, Math.round(y*cs)+.5); g.lineTo(W, Math.round(y*cs)+.5); }
     g.strokeStyle = "rgba(7,15,33,.22)"; g.stroke();
 
-    byZ().forEach(function(it){ drawItem(g, it, cs); });
+    byZ().forEach(function(it){
+      try {
+        drawItem(g, it, cs);
+      } catch (err){
+        var b = boxOf(it);
+        g.globalAlpha = 1; g.setLineDash([4,3]);
+        g.strokeStyle = "#C0392B"; g.lineWidth = 2;
+        g.strokeRect(b.x*cs+1, b.y*cs+1, Math.max(b.w,1)*cs-2, Math.max(b.h,1)*cs-2);
+        g.setLineDash([]);
+        g.fillStyle = "#C0392B";
+        g.font = "600 " + Math.max(9, cs*0.4).toFixed(1) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
+        g.textAlign = "center"; g.textBaseline = "middle";
+        g.fillText(it.label || "?", (b.x + Math.max(b.w,1)/2)*cs, (b.y + Math.max(b.h,1)/2)*cs);
+      }
+    });
   }
 
   function paintOverlay(g, cs){
@@ -647,9 +676,9 @@
   // for the PNG / PDF export, which wants everything on one context
   function paint(g, cs){ paintScene(g, cs); }
 
-  var ov = $("ov"), octx = ov.getContext("2d");
-  var sceneDirty = true, curDPR = DPR, rafId = 0;
+  var curDPR = DPR, rafId = 0;
 
+  // one canvas, painted whole every time — no cached layer that can go stale
   function render(withStats){
     var cs = state.cell, W = state.cols*cs, H = state.rows*cs;
     // a very large board at 2x costs more memory than it is worth
@@ -660,26 +689,20 @@
       curDPR = want;
       cv.style.width = W+"px"; cv.style.height = H+"px";
       cv.width = px; cv.height = py;
-      ov.style.width = W+"px"; ov.style.height = H+"px";
-      ov.width = px; ov.height = py;
-      sceneDirty = true;
     }
-    if (sceneDirty){
-      ctx.setTransform(curDPR,0,0,curDPR,0,0);
-      paintScene(ctx, cs);
-      sceneDirty = false;
-    }
-    octx.setTransform(curDPR,0,0,curDPR,0,0);
-    octx.clearRect(0, 0, W, H);
-    paintOverlay(octx, cs);
+    ctx.setTransform(curDPR,0,0,curDPR,0,0);
+    paintScene(ctx, cs);
+    paintOverlay(ctx, cs);
     if (document.activeElement !== inl) placeInline();
     if (withStats) renderStats();
   }
 
-  // the scene changed
-  function draw(){ sceneDirty = true; if (rafId){ cancelAnimationFrame(rafId); rafId = 0; } render(true); }
+  function draw(){
+    if (rafId){ cancelAnimationFrame(rafId); rafId = 0; }
+    render(true);
+  }
 
-  // only the cursor moved — repaint the thin overlay, at most once per frame
+  // cursor-only changes still repaint at most once per frame
   function overlay(){
     if (rafId) return;
     rafId = requestAnimationFrame(function(){ rafId = 0; render(false); });
@@ -763,6 +786,38 @@
     });
     if (typeof state.sizeIx !== "number") state.sizeIx = 0;
   }
+  // nothing on the board may be undrawable: fix stale types, bad colours, bad boxes
+  function repairItems(){
+    var fixed = 0, firstOf = {};
+    state.types.forEach(function(t){
+      if (!okColor(t.color)){ t.color = nextBrightColor(); fixed++; }
+      if (!firstOf[t.kind]) firstOf[t.kind] = t;
+    });
+    state.items.forEach(function(it){
+      var t = state.types.filter(function(x){ return x.id === it.type; })[0];
+      if (!t){
+        t = firstOf[it.orient ? "barricade" : "stall"] || state.types[0];
+        if (t){ it.type = t.id; fixed++; }
+      }
+      if (it.color && !okColor(it.color)){
+        if (state.autoColor && kindOf(it) === "stall") it.color = nextBrightColor();
+        else delete it.color;
+        fixed++;
+      }
+      if (it.orient){
+        if (!(it.len > 0)){ it.len = 1; fixed++; }
+      } else {
+        if (!(it.w > 0)){ it.w = 1; fixed++; }
+        if (!(it.h > 0)){ it.h = 1; fixed++; }
+      }
+      if (!(it.x >= 0)){ it.x = 0; fixed++; }
+      if (!(it.y >= 0)){ it.y = 0; fixed++; }
+      if (typeof it.z !== "number" || !isFinite(it.z)) it.z = BASE_Z[kindOf(it)] || 30;
+    });
+    if (fixed) toast(fixed + " thing" + (fixed > 1 ? "s" : "") + " on the layout repaired");
+    return fixed;
+  }
+
   function sizesOf(type){ return (type && type.sizes) || []; }
   function currentSize(type){
     var list = sizesOf(type);
@@ -1530,7 +1585,7 @@
     var kind = $("dKind").value;
     var prefix = $("dPrefix").value.trim().toUpperCase();
     var rate = $("dRate").value ? Number($("dRate").value) : null;
-    var color = $("dColor").value;
+    var color = okColor($("dColor").value) ? $("dColor").value : nextBrightColor();
     var sizes = kind === "barricade" ? [] : collectSizes();
     var face = kind === "stall" ? $("dFace").value : "n";
     if (editing){
@@ -1592,6 +1647,11 @@
   $("title").addEventListener("input", function(){ state.title = this.value; save(); });
 
   $("undoBtn").addEventListener("click", undo);
+  $("repairBtn").addEventListener("click", function(){
+    var n = repairItems();
+    save(); draw();
+    if (!n) toast("Everything on the layout is drawable");
+  });
   $("renumBtn").addEventListener("click", function(){
     var counters = {};
     snapshot();
@@ -1774,7 +1834,7 @@
                              x:b.x, y:b.y, len:b.length, z: b.z || BASE_Z.barricade, label:"Barricade" });
         });
         state.activeType = state.types[0].id; state.sizeIx = 0;
-        normalizeTypes();
+        normalizeTypes(); repairItems();
         $("title").value = state.title; $("cols").value = state.cols;
         $("rows").value = state.rows; $("meters").value = state.meters;
         select(null); hint(); save(); draw();
@@ -2022,6 +2082,8 @@
   $("autoColor").checked = state.autoColor !== false;
   auto.on = state.autoSave !== false;
   normalizeTypes();
+  if (!isFinite(Number(state.hue))) state.hue = 24;
+  if (repairItems()) persist();
   showDoc(); hint(); renderTypes(); draw();
   refreshStatus();
 })();
