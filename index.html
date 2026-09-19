@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Stall Layout Designer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    --page:#F2EDE4; --surface:#FFFDF9; --ink:#070F21; --muted:rgba(7,15,33,.58);
+    --line:rgba(7,15,33,.14); --amber:#E9A031; --navy:#070F21;
+    box-sizing:border-box;
+    padding-top:env(safe-area-inset-top,0px);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --page:#050914; --surface:#0D1730; --ink:#F4EFE6; --muted:rgba(244,239,230,.6);
+      --line:rgba(233,160,49,.22); --navy:#F4EFE6;
+    }
+  }
+  :root[data-theme="dark"]{
+    --page:#050914; --surface:#0D1730; --ink:#F4EFE6; --muted:rgba(244,239,230,.6);
+    --line:rgba(233,160,49,.22); --navy:#F4EFE6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--page);color:var(--ink);
+    font-family:"Segoe UI",Roboto,-apple-system,system-ui,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;font-size:14px}
+  header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    padding:12px 16px;border-bottom:1px solid var(--line);background:var(--surface)}
+  header h1{font-size:16px;font-weight:650;margin:0;letter-spacing:-.01em}
+  header .spacer{flex:1}
+  .layoutTitle{font:inherit;font-size:13px;padding:6px 10px;border-radius:8px;
+    border:1px solid var(--line);background:transparent;color:var(--ink);min-width:190px}
+  main{display:flex;align-items:stretch;min-height:calc(100vh - 58px)}
+  .side{width:300px;flex:none;border-right:1px solid var(--line);background:var(--surface);
+    padding:16px;overflow-y:auto}
+  .stage{flex:1;overflow:auto;padding:20px}
+  .stageInner{display:inline-block;background:#fff;border:1px solid var(--line);
+    border-radius:10px;padding:10px;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+  canvas{display:block;touch-action:none;cursor:crosshair;border-radius:4px}
+  h2{font-size:12px;font-weight:600;color:var(--muted);margin:0 0 8px;letter-spacing:.02em}
+  .block{margin-bottom:20px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);flex:1;min-width:64px}
+  input[type=number],input[type=text],select{font:inherit;font-size:13px;padding:7px 9px;
+    border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--ink);width:100%}
+  input[type=color]{width:38px;height:32px;padding:2px;border-radius:8px;border:1px solid var(--line);background:transparent}
+  button{font:inherit;font-size:13px;padding:8px 13px;border-radius:9px;cursor:pointer;
+    border:1px solid var(--line);background:transparent;color:var(--ink)}
+  button:hover{border-color:var(--amber)}
+  button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+  button.primary{background:var(--amber);border-color:var(--amber);color:#1A1205;font-weight:600}
+  button.danger{color:#C0392B;border-color:rgba(192,57,43,.35)}
+  button.mini{padding:6px 9px;font-size:12px;flex:1}
+  .group{margin-bottom:12px}
+  .group > .gh{font-size:11px;color:var(--muted);margin:0 0 5px 2px}
+  .types{display:flex;flex-direction:column;gap:5px}
+  .ty{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:9px;
+    border:1px solid var(--line);cursor:pointer;background:transparent;text-align:left;width:100%}
+  .ty[aria-pressed="true"]{border-color:var(--amber);box-shadow:inset 0 0 0 1px var(--amber)}
+  .sw{width:15px;height:15px;border-radius:4px;flex:none;border:1px solid rgba(0,0,0,.2)}
+  .ty .nm{flex:1;font-weight:600;font-size:13px}
+  .ty .ct{font-size:12px;color:var(--muted)}
+  .stats{font-size:13px}
+  .stats div{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line)}
+  .stats div.tot{border:0;font-weight:650}
+  .stats div.sub{color:var(--muted);font-size:12px;padding-left:10px}
+  .hint{font-size:12px;color:var(--muted);line-height:1.55;margin:8px 0 0}
+  .sel{border:1px solid var(--amber);border-radius:10px;padding:12px;background:rgba(233,160,49,.08)}
+  .btns{display:flex;gap:8px;flex-wrap:wrap}
+  .zrow{display:flex;gap:6px;margin:4px 0 10px}
+  dialog{border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);
+    padding:18px;max-width:340px;width:92vw}
+  dialog::backdrop{background:rgba(7,15,33,.45)}
+  .docname{font-size:12px;color:var(--muted);max-width:190px;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
+  .dlist{display:flex;flex-direction:column;gap:6px;max-height:44vh;overflow-y:auto;margin:4px 0 14px}
+  .drow{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--line);
+    border-radius:9px}
+  .drow .dn{flex:1;min-width:0}
+  .drow .dn b{display:block;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .drow .dn span{font-size:11px;color:var(--muted)}
+  .empty{font-size:13px;color:var(--muted);padding:10px 2px}
+  .note{font-size:12px;color:var(--muted);line-height:1.55;margin:0 0 12px}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--navy);
+    color:var(--page);padding:10px 16px;border-radius:999px;font-size:13px;opacity:0;
+    pointer-events:none;transition:opacity .18s;z-index:9}
+  .toast.on{opacity:1}
+  @media (max-width:860px){
+    main{flex-direction:column}
+    .side{width:auto;border-right:0;border-bottom:1px solid var(--line)}
+    .stage{padding:12px}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Stall Layout Designer</h1>
+  <input class="layoutTitle" id="title" value="Business Expo — Nagpur" aria-label="Layout title">
+  <span class="spacer"></span>
+  <span id="docName" class="docname"></span>
+  <button id="designsBtn">Designs</button>
+  <button id="pngBtn">Save PNG</button>
+  <button id="pdfBtn">Save PDF</button>
+  <button id="jsonBtn">Export JSON</button>
+  <button id="loadBtn">Open JSON</button>
+  <input type="file" id="file" accept="application/json" hidden>
+</header>
+
+<main>
+  <aside class="side">
+    <div class="block">
+      <h2>Grid</h2>
+      <div class="row">
+        <label class="f">Columns<input type="number" id="cols" min="4" max="140" value="44"></label>
+        <label class="f">Rows<input type="number" id="rows" min="4" max="140" value="30"></label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label class="f">1 box =<input type="number" id="meters" min="0.5" max="20" step="0.5" value="1"></label>
+        <label class="f">Zoom<input type="number" id="zoom" min="10" max="60" value="22"></label>
+      </div>
+    </div>
+
+    <div class="block">
+      <h2>Draw with</h2>
+      <div id="typeGroups"></div>
+      <div class="btns" style="margin-top:9px">
+        <button id="addType">Add type</button>
+        <button id="editType">Edit type</button>
+      </div>
+      <p class="hint" id="drawHint"></p>
+    </div>
+
+    <div class="block" id="selBox" hidden>
+      <h2>Selected</h2>
+      <div class="sel">
+        <div class="row">
+          <label class="f">Name / number<input type="text" id="selLabel"></label>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <label class="f">Type<select id="selType"></select></label>
+        </div>
+        <div class="row" id="rectFields" style="margin-top:8px">
+          <label class="f">X<input type="number" id="selX" min="0"></label>
+          <label class="f">Y<input type="number" id="selY" min="0"></label>
+          <label class="f">W<input type="number" id="selW" min="1"></label>
+          <label class="f">H<input type="number" id="selH" min="1"></label>
+        </div>
+        <div class="row" id="barFields" style="margin-top:8px" hidden>
+          <label class="f">X<input type="number" id="barX" min="0"></label>
+          <label class="f">Y<input type="number" id="barY" min="0"></label>
+          <label class="f">Length<input type="number" id="barLen" min="1"></label>
+          <label class="f">Run<select id="barOrient"><option value="h">Across</option><option value="v">Down</option></select></label>
+        </div>
+        <p class="hint" id="selSize"></p>
+        <p class="hint" style="margin-bottom:2px">Layer <b id="zVal">30</b></p>
+        <div class="zrow">
+          <button class="mini" id="zBack" title="Send to back">Back</button>
+          <button class="mini" id="zDown" title="Send backward">–</button>
+          <button class="mini" id="zUp" title="Bring forward">+</button>
+          <button class="mini" id="zFront" title="Bring to front">Front</button>
+        </div>
+        <div class="btns">
+          <button id="dupBtn">Duplicate</button>
+          <button class="danger" id="delBtn">Delete</button>
+        </div>
+        <p class="hint">Drag the selected item to move it, drag its handles to resize. Arrow keys nudge, Delete removes.</p>
+      </div>
+    </div>
+
+    <div class="block">
+      <h2>Counts</h2>
+      <div class="stats" id="stats"></div>
+    </div>
+
+    <div class="block">
+      <h2>Layout</h2>
+      <div class="btns">
+        <button id="renumBtn">Renumber stalls</button>
+        <button class="danger" id="clearBtn">Clear all</button>
+      </div>
+    </div>
+  </aside>
+
+  <section class="stage">
+    <div class="stageInner"><canvas id="cv"></canvas></div>
+  </section>
+</main>
+
+<dialog id="typeDlg">
+  <h2 style="font-size:14px;color:var(--ink);margin:0 0 12px">Type</h2>
+  <label class="f" style="margin-bottom:10px">Name<input type="text" id="dName" placeholder="Regular"></label>
+  <label class="f" style="margin-bottom:10px">What is it?
+    <select id="dKind">
+      <option value="stall">Stall — numbered, counted</option>
+      <option value="zone">Area — food court, play zone, stage</option>
+      <option value="path">Pathway — aisle or walkway</option>
+      <option value="barricade">Barricade — a line, not a box</option>
+    </select>
+  </label>
+  <label class="f" style="margin-bottom:10px">Number prefix (stalls only)<input type="text" id="dPrefix" placeholder="Y" maxlength="4"></label>
+  <label class="f" style="margin-bottom:10px">Rate per stall (optional)<input type="number" id="dRate" min="0" step="500"></label>
+  <label class="f" style="margin-bottom:14px;flex:none">Colour<input type="color" id="dColor" value="#E9A031"></label>
+  <div class="btns">
+    <button class="primary" id="dSave">Save type</button>
+    <button id="dCancel">Cancel</button>
+    <button class="danger" id="dDelete" style="margin-left:auto">Delete</button>
+  </div>
+</dialog>
+
+<dialog id="srvDlg">
+  <h2 style="font-size:14px;color:var(--ink);margin:0 0 10px">Saved designs</h2>
+  <p class="note" id="srvNote"></p>
+
+  <div id="srvLock" hidden>
+    <label class="f" style="margin-bottom:10px">Password
+      <input type="password" id="srvPass" autocomplete="current-password" placeholder="Enter password">
+    </label>
+    <div class="btns" style="margin-bottom:6px">
+      <button class="primary" id="srvUnlock">Unlock</button>
+      <button id="srvClose2">Close</button>
+    </div>
+  </div>
+
+  <div id="srvMain" hidden>
+    <div class="dlist" id="srvList"></div>
+    <label class="f" style="margin-bottom:10px">Design name
+      <input type="text" id="srvName" placeholder="Business Expo — Nagpur">
+    </label>
+    <div class="btns">
+      <button class="primary" id="srvSave">Save</button>
+      <button id="srvSaveAs">Save as new</button>
+      <button id="srvNew">New design</button>
+      <button id="srvLogout" style="margin-left:auto">Lock</button>
+    </div>
+  </div>
+
+  <div class="btns" style="margin-top:12px">
+    <button id="srvClose">Close</button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+  var DPR = Math.min(window.devicePixelRatio || 1, 2);
+  var KEY = "stall-layout-designer-v3";
+  var KINDS = { stall:"Stalls", zone:"Areas", path:"Pathways", barricade:"Barricades" };
+  var BASE_Z = { path:10, zone:20, stall:30, barricade:40 };
+  var HANDLES = ["nw","n","ne","e","se","s","sw","w"];
+
+  var DEFAULTS = {
+    title:"Business Expo — Nagpur",
+    cols:44, rows:30, cell:22, meters:1,
+    types:[
+      {id:"t1", name:"Regular",    kind:"stall", prefix:"Y", color:"#E9A031", rate:53000},
+      {id:"t2", name:"Ruby",       kind:"stall", prefix:"L", color:"#C2476A", rate:24000},
+      {id:"t3", name:"Premium",    kind:"stall", prefix:"T", color:"#1F3B73", rate:null},
+      {id:"t4", name:"Food stall", kind:"stall", prefix:"F", color:"#B8740F", rate:null},
+      {id:"t5", name:"Food Court", kind:"zone",  prefix:"",  color:"#E4C9A0", rate:null},
+      {id:"t6", name:"Play Zone",  kind:"zone",  prefix:"",  color:"#9FD2C4", rate:null},
+      {id:"t7", name:"Stage",      kind:"zone",  prefix:"",  color:"#B3A8D6", rate:null},
+      {id:"t8", name:"Walkway",    kind:"path",  prefix:"",  color:"#D8D4CC", rate:null},
+      {id:"t9", name:"Barricade",  kind:"barricade", prefix:"", color:"#D9822B", rate:null}
+    ],
+    activeType:"t1",
+    items:[]
+  };
+  var state = JSON.parse(JSON.stringify(DEFAULTS));
+  var sel = null, drag = null, seq = 1;
+
+  var cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+  function $(id){ return document.getElementById(id); }
+
+  /* ---------- storage ---------- */
+  function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} }
+  function restore(){
+    try {
+      var raw = localStorage.getItem(KEY) || localStorage.getItem("stall-layout-designer-v2");
+      if (!raw) return;
+      var s = JSON.parse(raw);
+      if (s && s.types && s.items) state = Object.assign(state, s);
+      state.items.forEach(function(i){ if (typeof i.z !== "number") i.z = BASE_Z[kindOf(i)] || 30; });
+    } catch(e){}
+  }
+
+  /* ---------- helpers ---------- */
+  function typeById(id){
+    for (var i=0;i<state.types.length;i++) if (state.types[i].id===id) return state.types[i];
+    return state.types[0];
+  }
+  function kindOf(item){ return typeById(item.type).kind; }
+  function uid(){ return "i" + Date.now().toString(36) + (seq++).toString(36); }
+  function rectOverlap(a,b){ return a.x < b.x+b.w && b.x < a.x+a.w && a.y < b.y+b.h && b.y < a.y+a.h; }
+  function itemsOf(kind){ return state.items.filter(function(i){ return kindOf(i)===kind; }); }
+  function countOf(typeId){ var n=0; state.items.forEach(function(i){ if (i.type===typeId) n++; }); return n; }
+  function byZ(){
+    return state.items.map(function(it,i){ return {it:it,i:i}; })
+      .sort(function(a,b){ return (a.it.z - b.it.z) || (a.i - b.i); })
+      .map(function(o){ return o.it; });
+  }
+  function toast(msg){
+    var t = $("toast"); t.textContent = msg; t.classList.add("on");
+    clearTimeout(toast._t); toast._t = setTimeout(function(){ t.classList.remove("on"); }, 2000);
+  }
+  function textColor(hex){
+    var c = (hex||"#ffffff").replace("#","");
+    if (c.length===3) c = c[0]+c[0]+c[1]+c[1]+c[2]+c[2];
+    var r=parseInt(c.substr(0,2),16), g=parseInt(c.substr(2,2),16), b=parseInt(c.substr(4,2),16);
+    return (r*299+g*587+b*114)/1000 > 150 ? "#101010" : "#FFFFFF";
+  }
+  function nextLabel(type){
+    if (type.kind !== "stall"){ var n = countOf(type.id); return n ? type.name+" "+(n+1) : type.name; }
+    if (!type.prefix) return type.name;
+    var max = 0, re = new RegExp("^"+type.prefix+"(\\d+)$","i");
+    state.items.forEach(function(i){ var m = re.exec(i.label||""); if (m) max = Math.max(max, parseInt(m[1],10)); });
+    return type.prefix + (max+1);
+  }
+  function boxOf(it){
+    return it.orient ? { x:it.x, y:it.y, w: it.orient==="h"?it.len:0, h: it.orient==="v"?it.len:0 }
+                     : { x:it.x, y:it.y, w:it.w, h:it.h };
+  }
+
+  /* placement: stalls never overlap stalls; areas and pathways never overlap each other;
+     stalls may sit inside areas and over pathways; barricades sit anywhere. */
+  function fits(kind, r, ignoreId){
+    if (kind === "barricade") return r.x>=0 && r.y>=0 && r.x<=state.cols && r.y<=state.rows;
+    if (r.w<1 || r.h<1) return false;
+    if (r.x<0 || r.y<0 || r.x+r.w>state.cols || r.y+r.h>state.rows) return false;
+    var blockers = (kind === "stall") ? ["stall"] : ["zone","path"];
+    for (var i=0;i<state.items.length;i++){
+      var it = state.items[i];
+      if (it.id === ignoreId || it.orient) continue;
+      if (blockers.indexOf(kindOf(it)) === -1) continue;
+      if (rectOverlap(r, it)) return false;
+    }
+    return true;
+  }
+
+  /* ---------- drawing ---------- */
+  function barRect(it, cs){
+    var t = Math.max(3, cs*0.22);
+    return it.orient === "h" ? { x:it.x*cs, y:it.y*cs - t/2, w:it.len*cs, h:t }
+                             : { x:it.x*cs - t/2, y:it.y*cs, w:t, h:it.len*cs };
+  }
+  function screenRect(it, cs){
+    return it.orient ? barRect(it, cs) : { x:it.x*cs, y:it.y*cs, w:it.w*cs, h:it.h*cs };
+  }
+  function handlePoints(it, cs){
+    var r = screenRect(it, cs), pts = {};
+    if (it.orient){
+      if (it.orient === "h"){ pts.w = {x:r.x, y:r.y+r.h/2}; pts.e = {x:r.x+r.w, y:r.y+r.h/2}; }
+      else { pts.n = {x:r.x+r.w/2, y:r.y}; pts.s = {x:r.x+r.w/2, y:r.y+r.h}; }
+      return pts;
+    }
+    pts.nw={x:r.x,y:r.y}; pts.n={x:r.x+r.w/2,y:r.y}; pts.ne={x:r.x+r.w,y:r.y};
+    pts.e={x:r.x+r.w,y:r.y+r.h/2}; pts.se={x:r.x+r.w,y:r.y+r.h}; pts.s={x:r.x+r.w/2,y:r.y+r.h};
+    pts.sw={x:r.x,y:r.y+r.h}; pts.w={x:r.x,y:r.y+r.h/2};
+    return pts;
+  }
+
+  function drawItem(g, it, cs){
+    var t = typeById(it.type), kind = t.kind;
+    if (kind === "path"){
+      g.fillStyle = t.color; g.globalAlpha = .72;
+      g.fillRect(it.x*cs, it.y*cs, it.w*cs, it.h*cs); g.globalAlpha = 1;
+      g.save(); g.beginPath(); g.rect(it.x*cs, it.y*cs, it.w*cs, it.h*cs); g.clip();
+      g.strokeStyle = "rgba(7,15,33,.14)"; g.lineWidth = 1;
+      for (var d = -it.h*cs; d < it.w*cs; d += cs*0.7){
+        g.beginPath(); g.moveTo(it.x*cs+d, it.y*cs+it.h*cs); g.lineTo(it.x*cs+d+it.h*cs, it.y*cs); g.stroke();
+      }
+      g.restore();
+      g.strokeStyle = "rgba(7,15,33,.32)"; g.lineWidth = 1;
+      g.strokeRect(it.x*cs+.5, it.y*cs+.5, it.w*cs-1, it.h*cs-1);
+      labelBlock(g, it, cs, true);
+    } else if (kind === "zone"){
+      g.fillStyle = t.color; g.globalAlpha = .55;
+      g.fillRect(it.x*cs, it.y*cs, it.w*cs, it.h*cs); g.globalAlpha = 1;
+      g.setLineDash([cs*0.35, cs*0.22]);
+      g.strokeStyle = "rgba(7,15,33,.45)"; g.lineWidth = 1.6;
+      g.strokeRect(it.x*cs+1, it.y*cs+1, it.w*cs-2, it.h*cs-2);
+      g.setLineDash([]);
+      labelBlock(g, it, cs, false);
+    } else if (kind === "stall"){
+      var px=it.x*cs, py=it.y*cs, pw=it.w*cs, ph=it.h*cs;
+      g.fillStyle = t.color; g.globalAlpha = .92;
+      g.fillRect(px+1, py+1, pw-2, ph-2); g.globalAlpha = 1;
+      g.strokeStyle = "rgba(7,15,33,.55)"; g.lineWidth = 1.2;
+      g.strokeRect(px+1.5, py+1.5, pw-3, ph-3);
+      var size = Math.min(Math.max(8, Math.min(pw,ph)*0.34), ph*0.5, pw*0.42);
+      g.fillStyle = textColor(t.color);
+      g.font = "600 " + size.toFixed(1) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
+      g.textAlign = "center"; g.textBaseline = "middle";
+      g.fillText(it.label || "", px+pw/2, py+ph/2);
+    } else {
+      var r = barRect(it, cs);
+      g.fillStyle = "#FFFFFF"; g.fillRect(r.x, r.y, r.w, r.h);
+      g.save(); g.beginPath(); g.rect(r.x, r.y, r.w, r.h); g.clip();
+      g.fillStyle = t.color;
+      var step = Math.max(6, cs*0.45), sx, sy;
+      if (it.orient === "h"){
+        for (sx = r.x - r.h; sx < r.x + r.w; sx += step*2){
+          g.beginPath(); g.moveTo(sx, r.y+r.h); g.lineTo(sx+step, r.y+r.h);
+          g.lineTo(sx+step+r.h, r.y); g.lineTo(sx+r.h, r.y); g.closePath(); g.fill();
+        }
+      } else {
+        for (sy = r.y - r.w; sy < r.y + r.h; sy += step*2){
+          g.beginPath(); g.moveTo(r.x, sy); g.lineTo(r.x, sy+step);
+          g.lineTo(r.x+r.w, sy+step+r.w); g.lineTo(r.x+r.w, sy+r.w); g.closePath(); g.fill();
+        }
+      }
+      g.restore();
+      g.strokeStyle = "rgba(7,15,33,.5)"; g.lineWidth = 1;
+      g.strokeRect(r.x+.5, r.y+.5, r.w-1, r.h-1);
+    }
+  }
+
+  function labelBlock(g, it, cs, faint){
+    var t = typeById(it.type);
+    var vertical = it.h > it.w * 1.6;
+    var size = Math.min(Math.max(9, cs*0.62), (vertical ? it.w : it.h)*cs*0.5);
+    g.save();
+    g.fillStyle = faint ? "rgba(7,15,33,.45)" : "rgba(7,15,33,.78)";
+    g.font = "700 " + size.toFixed(1) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
+    g.textAlign = "center"; g.textBaseline = "middle";
+    var cx = (it.x + it.w/2)*cs, cy = (it.y + it.h/2)*cs;
+    if (vertical){ g.translate(cx, cy); g.rotate(-Math.PI/2); g.fillText(it.label || t.name, 0, 0); }
+    else g.fillText(it.label || t.name, cx, (it.h > 3) ? (it.y*cs + size*1.1) : cy);
+    g.restore();
+  }
+
+  function paint(g, cs, opts){
+    opts = opts || {};
+    var W = state.cols*cs, H = state.rows*cs, x, y;
+    g.fillStyle = "#FFFFFF"; g.fillRect(0,0,W,H);
+    g.lineWidth = 1;
+    for (x=0;x<=state.cols;x++){
+      g.strokeStyle = (x%5===0) ? "rgba(7,15,33,.22)" : "rgba(7,15,33,.09)";
+      g.beginPath(); g.moveTo(Math.round(x*cs)+.5,0); g.lineTo(Math.round(x*cs)+.5,H); g.stroke();
+    }
+    for (y=0;y<=state.rows;y++){
+      g.strokeStyle = (y%5===0) ? "rgba(7,15,33,.22)" : "rgba(7,15,33,.09)";
+      g.beginPath(); g.moveTo(0,Math.round(y*cs)+.5); g.lineTo(W,Math.round(y*cs)+.5); g.stroke();
+    }
+
+    byZ().forEach(function(it){ drawItem(g, it, cs); });
+
+    if (opts.noSel) return;
+
+    if (sel && state.items.indexOf(sel) !== -1){
+      var rr = screenRect(sel, cs);
+      g.strokeStyle = "#070F21"; g.lineWidth = 2.5; g.setLineDash([]);
+      g.strokeRect(rr.x-2, rr.y-2, rr.w+4, rr.h+4);
+      var pts = handlePoints(sel, cs), k = Math.max(7, cs*0.34);
+      Object.keys(pts).forEach(function(key){
+        var p = pts[key];
+        g.fillStyle = "#FFFDF9"; g.strokeStyle = "#070F21"; g.lineWidth = 1.5;
+        g.fillRect(p.x-k/2, p.y-k/2, k, k);
+        g.strokeRect(p.x-k/2, p.y-k/2, k, k);
+      });
+    }
+
+    if (drag && drag.preview){
+      var pr = drag.previewItem;
+      var r2 = screenRect(pr, cs);
+      g.fillStyle = drag.ok ? "rgba(233,160,49,.32)" : "rgba(192,57,43,.28)";
+      g.fillRect(r2.x, r2.y, Math.max(r2.w, 3), Math.max(r2.h, 3));
+      g.strokeStyle = drag.ok ? "#B8740F" : "#C0392B"; g.lineWidth = 2;
+      g.setLineDash(drag.mode === "draw" ? [] : [6,4]);
+      g.strokeRect(r2.x+1, r2.y+1, Math.max(r2.w-2,2), Math.max(r2.h-2,2));
+      g.setLineDash([]);
+    }
+  }
+
+  function draw(){
+    var cs = state.cell, W = state.cols*cs, H = state.rows*cs;
+    cv.style.width = W+"px"; cv.style.height = H+"px";
+    cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    paint(ctx, cs, {});
+    renderStats();
+  }
+
+  /* ---------- pointer ---------- */
+  function pos(e){
+    var r = cv.getBoundingClientRect();
+    var px = e.clientX-r.left, py = e.clientY-r.top;
+    return { px:px, py:py, x: Math.floor(px/state.cell), y: Math.floor(py/state.cell) };
+  }
+  function rectOf(a,b){
+    return { x:Math.min(a.x,b.x), y:Math.min(a.y,b.y), w:Math.abs(a.x-b.x)+1, h:Math.abs(a.y-b.y)+1 };
+  }
+  function handleAt(p){
+    if (!sel) return null;
+    var pts = handlePoints(sel, state.cell), tol = Math.max(7, state.cell*0.34)/2 + 3, best = null;
+    Object.keys(pts).forEach(function(key){
+      var q = pts[key];
+      if (Math.abs(p.px-q.x) <= tol && Math.abs(p.py-q.y) <= tol) best = key;
+    });
+    return best;
+  }
+  function hitAt(p){
+    var list = byZ(), cs = state.cell;
+    for (var i=list.length-1;i>=0;i--){
+      var it = list[i];
+      if (it.orient){
+        var r = barRect(it, cs), pad = 4;
+        if (p.px>=r.x-pad && p.px<=r.x+r.w+pad && p.py>=r.y-pad && p.py<=r.y+r.h+pad) return it;
+      } else if (p.x>=it.x && p.x<it.x+it.w && p.y>=it.y && p.y<it.y+it.h) return it;
+    }
+    return null;
+  }
+  function clone(it){ return JSON.parse(JSON.stringify(it)); }
+
+  cv.addEventListener("pointerdown", function(e){
+    var p = pos(e);
+    if (p.x<0||p.y<0||p.x>=state.cols||p.y>=state.rows) return;
+    cv.setPointerCapture(e.pointerId);
+    var h = handleAt(p);
+    if (h && sel){
+      drag = { mode:"resize", handle:h, orig: clone(sel), start:p, previewItem: clone(sel), ok:true, preview:true };
+      return;
+    }
+    var hit = hitAt(p);
+    if (hit && sel && hit.id === sel.id){
+      drag = { mode:"move", orig: clone(sel), start:p, previewItem: clone(sel), ok:true, preview:false };
+      return;
+    }
+    drag = { mode:"draw", start:p, hit:hit, preview:false, ok:true,
+             previewItem:{ x:p.x, y:p.y, w:1, h:1 } };
+    draw();
+  });
+
+  cv.addEventListener("pointermove", function(e){
+    if (!drag) return;
+    var p = pos(e);
+    p.x = Math.max(0, Math.min(state.cols-1, p.x));
+    p.y = Math.max(0, Math.min(state.rows-1, p.y));
+
+    if (drag.mode === "draw"){
+      var r = rectOf(drag.start, p), kind = typeById(state.activeType).kind;
+      if (kind === "barricade"){
+        var line = r.w >= r.h ? {orient:"h", x:r.x, y:r.y, len:r.w} : {orient:"v", x:r.x, y:r.y, len:r.h};
+        drag.previewItem = { type: state.activeType, orient: line.orient, x: line.x, y: line.y, len: line.len };
+        drag.ok = true;
+      } else {
+        drag.previewItem = { type: state.activeType, x:r.x, y:r.y, w:r.w, h:r.h };
+        drag.ok = fits(kind, r, null);
+      }
+      drag.preview = !(r.w===1 && r.h===1 && drag.hit && kind !== "barricade");
+    }
+    else if (drag.mode === "move"){
+      var dx = p.x - drag.start.x, dy = p.y - drag.start.y;
+      var it = clone(drag.orig);
+      it.x = drag.orig.x + dx; it.y = drag.orig.y + dy;
+      if (it.orient){
+        it.x = Math.max(0, Math.min(state.cols - (it.orient==="h"?it.len:0), it.x));
+        it.y = Math.max(0, Math.min(state.rows - (it.orient==="v"?it.len:0), it.y));
+        drag.ok = true;
+      } else drag.ok = fits(kindOf(it), it, it.id);
+      drag.previewItem = it; drag.preview = (dx!==0 || dy!==0);
+    }
+    else if (drag.mode === "resize"){
+      var o = drag.orig, n = clone(o), h = drag.handle;
+      if (o.orient){
+        if (h === "w" || h === "n"){
+          var end = (o.orient==="h") ? o.x + o.len : o.y + o.len;
+          var start = (o.orient==="h") ? Math.min(p.x, end-1) : Math.min(p.y, end-1);
+          if (o.orient==="h"){ n.x = start; n.len = end - start; }
+          else { n.y = start; n.len = end - start; }
+        } else {
+          n.len = (o.orient==="h") ? Math.max(1, p.x - o.x + 1) : Math.max(1, p.y - o.y + 1);
+        }
+        drag.ok = true;
+      } else {
+        var right = o.x + o.w, bottom = o.y + o.h;
+        if (h.indexOf("w") !== -1){ n.x = Math.min(p.x, right-1); n.w = right - n.x; }
+        if (h.indexOf("e") !== -1){ n.w = Math.max(1, p.x - o.x + 1); }
+        if (h.indexOf("n") !== -1){ n.y = Math.min(p.y, bottom-1); n.h = bottom - n.y; }
+        if (h.indexOf("s") !== -1){ n.h = Math.max(1, p.y - o.y + 1); }
+        drag.ok = fits(kindOf(n), n, n.id);
+      }
+      drag.previewItem = n; drag.preview = true;
+    }
+    draw();
+  });
+
+  cv.addEventListener("pointerup", function(){
+    if (!drag) return;
+    var d = drag; drag = null;
+
+    if (d.mode === "draw"){
+      var type = typeById(state.activeType), pi = d.previewItem;
+      var single = (pi.w === 1 && pi.h === 1 && !pi.orient);
+      if (single && d.hit && type.kind !== "barricade"){ select(d.hit); draw(); return; }
+      if (type.kind === "barricade"){
+        var bar = { id: uid(), type: type.id, label: type.name, z: BASE_Z.barricade,
+                    orient: pi.orient, x: pi.x, y: pi.y, len: Math.max(1, pi.len) };
+        state.items.push(bar); select(bar); save(); draw(); return;
+      }
+      if (!d.ok){
+        toast(type.kind === "stall" ? "That overlaps another stall"
+                                    : "Areas and pathways cannot overlap each other");
+        draw(); return;
+      }
+      var item = { id: uid(), type: type.id, x:pi.x, y:pi.y, w:pi.w, h:pi.h,
+                   z: BASE_Z[type.kind], label: nextLabel(type) };
+      state.items.push(item); select(item); save(); draw(); return;
+    }
+
+    if (!sel){ draw(); return; }
+    if (!d.ok){ toast(d.mode === "move" ? "Cannot drop it there" : "Cannot resize it into that space"); draw(); return; }
+    var n = d.previewItem;
+    sel.x = n.x; sel.y = n.y;
+    if (n.orient) sel.len = n.len; else { sel.w = n.w; sel.h = n.h; }
+    select(sel); save(); draw();
+  });
+  cv.addEventListener("pointercancel", function(){ drag = null; draw(); });
+
+  document.addEventListener("keydown", function(e){
+    if (/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
+    if (!sel) return;
+    if (e.key === "Delete" || e.key === "Backspace"){ e.preventDefault(); removeSel(); return; }
+    if (e.key === "Escape"){ select(null); draw(); return; }
+    var d = {ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];
+    if (!d) return;
+    e.preventDefault();
+    var moved = Object.assign(boxOf(sel), { x: sel.x + d[0], y: sel.y + d[1] });
+    moved.id = sel.id;
+    if (sel.orient || fits(kindOf(sel), moved, sel.id)){
+      sel.x = Math.max(0, Math.min(state.cols, moved.x));
+      sel.y = Math.max(0, Math.min(state.rows, moved.y));
+      select(sel); save(); draw();
+    }
+  });
+
+  /* ---------- selection panel ---------- */
+  function select(item){
+    sel = item;
+    var box = $("selBox");
+    if (!item){ box.hidden = true; return; }
+    box.hidden = false;
+    var kind = kindOf(item), isBar = !!item.orient;
+    $("selLabel").value = item.label || "";
+    var opts = "";
+    state.types.filter(function(t){ return t.kind === kind; }).forEach(function(t){
+      opts += '<option value="'+t.id+'"'+(t.id===item.type?' selected':'')+'>'+t.name+'</option>';
+    });
+    $("selType").innerHTML = opts;
+    $("rectFields").hidden = isBar; $("barFields").hidden = !isBar;
+    if (isBar){
+      $("barX").value = item.x; $("barY").value = item.y;
+      $("barLen").value = item.len; $("barOrient").value = item.orient;
+      $("selSize").textContent = (item.len*state.meters) + " m " + (item.orient==="h" ? "across" : "down");
+    } else {
+      $("selX").value = item.x; $("selY").value = item.y;
+      $("selW").value = item.w; $("selH").value = item.h;
+      $("selSize").textContent = item.w + " × " + item.h + " boxes = " + (item.w*state.meters) +
+        " × " + (item.h*state.meters) + " m (" + (item.w*item.h*state.meters*state.meters) + " sq m)";
+    }
+    $("zVal").textContent = item.z;
+  }
+  function removeSel(){
+    if (!sel) return;
+    state.items = state.items.filter(function(i){ return i.id !== sel.id; });
+    select(null); save(); draw();
+  }
+  function applyField(id, key){
+    $(id).addEventListener("change", function(){
+      if (!sel) return;
+      var v = Math.round(Number(this.value));
+      var n = clone(sel); n[key] = isNaN(v) ? sel[key] : v;
+      if (!n.orient && !fits(kindOf(n), n, n.id)){ toast("That does not fit"); select(sel); return; }
+      if (n.orient){
+        n.x = Math.max(0, Math.min(state.cols, n.x)); n.y = Math.max(0, Math.min(state.rows, n.y));
+        n.len = Math.max(1, n.len);
+      }
+      sel.x=n.x; sel.y=n.y; if (n.orient) sel.len=n.len; else { sel.w=n.w; sel.h=n.h; }
+      select(sel); save(); draw();
+    });
+  }
+  applyField("selX","x"); applyField("selY","y"); applyField("selW","w"); applyField("selH","h");
+  applyField("barX","x"); applyField("barY","y"); applyField("barLen","len");
+  $("barOrient").addEventListener("change", function(){
+    if (!sel || !sel.orient) return;
+    sel.orient = this.value; select(sel); save(); draw();
+  });
+  $("selLabel").addEventListener("input", function(){ if (sel){ sel.label = this.value; save(); draw(); } });
+  $("selType").addEventListener("change", function(){ if (sel){ sel.type = this.value; save(); draw(); } });
+  $("delBtn").addEventListener("click", removeSel);
+  $("dupBtn").addEventListener("click", function(){
+    if (!sel) return;
+    var type = typeById(sel.type);
+    if (sel.orient){
+      var bar = Object.assign(clone(sel), { id: uid(), y: Math.min(state.rows, sel.y+2) });
+      state.items.push(bar); select(bar); save(); draw(); return;
+    }
+    var placed = null;
+    for (var dx=0; dx<state.cols && !placed; dx++){
+      for (var dy=0; dy<state.rows && !placed; dy++){
+        var r = { x: sel.x+sel.w+dx, y: sel.y+dy, w: sel.w, h: sel.h };
+        if (fits(type.kind, r, null)) placed = r;
+      }
+    }
+    if (!placed){ toast("No free space for a copy"); return; }
+    var copy = { id: uid(), type: sel.type, x:placed.x, y:placed.y, w:placed.w, h:placed.h,
+                 z: sel.z, label: nextLabel(type) };
+    state.items.push(copy); select(copy); save(); draw();
+  });
+
+  /* ---------- z order ---------- */
+  function zRange(){
+    var zs = state.items.map(function(i){ return i.z; });
+    return { min: zs.length ? Math.min.apply(null, zs) : 30, max: zs.length ? Math.max.apply(null, zs) : 30 };
+  }
+  function setZ(fn){
+    if (!sel) return;
+    var r = zRange();
+    sel.z = Math.max(1, Math.min(999, fn(sel.z, r)));
+    $("zVal").textContent = sel.z; save(); draw();
+  }
+  $("zFront").addEventListener("click", function(){ setZ(function(z,r){ return r.max+1; }); });
+  $("zBack").addEventListener("click",  function(){ setZ(function(z,r){ return r.min-1; }); });
+  $("zUp").addEventListener("click",    function(){ setZ(function(z){ return z+1; }); });
+  $("zDown").addEventListener("click",  function(){ setZ(function(z){ return z-1; }); });
+
+  /* ---------- types ---------- */
+  function renderTypes(){
+    var html = "";
+    Object.keys(KINDS).forEach(function(kind){
+      var list = state.types.filter(function(t){ return t.kind === kind; });
+      if (!list.length) return;
+      html += '<div class="group"><p class="gh">'+KINDS[kind]+'</p><div class="types">';
+      list.forEach(function(t){
+        html += '<button class="ty" data-id="'+t.id+'" aria-pressed="'+(t.id===state.activeType)+'">' +
+                '<span class="sw" style="background:'+t.color+'"></span>' +
+                '<span class="nm">'+t.name+'</span>' +
+                '<span class="ct">'+(t.prefix ? t.prefix+"·" : "")+countOf(t.id)+'</span></button>';
+      });
+      html += '</div></div>';
+    });
+    $("typeGroups").innerHTML = html;
+    Array.prototype.forEach.call($("typeGroups").querySelectorAll(".ty"), function(btn){
+      btn.addEventListener("click", function(){
+        state.activeType = btn.dataset.id; renderTypes(); hint(); save();
+      });
+    });
+  }
+  function hint(){
+    var k = typeById(state.activeType).kind;
+    $("drawHint").textContent =
+      k === "stall" ? "Drag on empty grid to make a stall — 3 across by 3 down gives a 3 × 3 stall. Stalls can sit inside an area like the food court."
+    : k === "zone"  ? "Drag to block out the area, then switch to a stall type and draw the stalls inside it."
+    : k === "path"  ? "Drag along the aisle — a long thin strip works best."
+    :                 "Drag along the line you want fenced. Sideways makes a horizontal barricade, downward a vertical one.";
+  }
+  function renderStats(){
+    var html = "", total = 0;
+    state.types.filter(function(t){ return t.kind==="stall"; }).forEach(function(t){
+      var n = countOf(t.id); if (!n) return;
+      total += n;
+      html += '<div><span>'+t.name+(t.prefix?" ("+t.prefix+")":"")+'</span><span>'+n+'</span></div>';
+    });
+    html += '<div class="tot"><span>Total stalls</span><span>'+total+'</span></div>';
+    var extras = "";
+    ["zone","path","barricade"].forEach(function(kind){
+      state.types.filter(function(t){ return t.kind===kind; }).forEach(function(t){
+        var n = countOf(t.id); if (!n) return;
+        extras += '<div class="sub"><span>'+t.name+'</span><span>'+n+'</span></div>';
+      });
+    });
+    $("stats").innerHTML = html + extras;
+    renderTypes();
+  }
+
+  var dlg = $("typeDlg"), editing = null;
+  function openType(t){
+    editing = t;
+    $("dName").value = t ? t.name : "";
+    $("dKind").value = t ? t.kind : "stall";
+    $("dPrefix").value = t ? t.prefix : "";
+    $("dRate").value = t && t.rate ? t.rate : "";
+    $("dColor").value = t ? t.color : "#E9A031";
+    $("dDelete").hidden = !t;
+    dlg.showModal();
+  }
+  $("addType").addEventListener("click", function(){ openType(null); });
+  $("editType").addEventListener("click", function(){ openType(typeById(state.activeType)); });
+  $("dCancel").addEventListener("click", function(){ dlg.close(); });
+  $("dSave").addEventListener("click", function(){
+    var name = $("dName").value.trim() || "Untitled";
+    var kind = $("dKind").value;
+    var prefix = $("dPrefix").value.trim().toUpperCase();
+    var rate = $("dRate").value ? Number($("dRate").value) : null;
+    var color = $("dColor").value;
+    if (editing){
+      if (editing.kind !== kind && countOf(editing.id) > 0){
+        toast("Delete its items before changing what it is"); return;
+      }
+      editing.name=name; editing.kind=kind; editing.prefix=prefix; editing.rate=rate; editing.color=color;
+    } else {
+      var t = { id:"t"+Date.now().toString(36), name:name, kind:kind, prefix:prefix, rate:rate, color:color };
+      state.types.push(t); state.activeType = t.id;
+    }
+    dlg.close(); hint(); save(); draw();
+  });
+  $("dDelete").addEventListener("click", function(){
+    if (!editing) return;
+    if (countOf(editing.id) > 0){ toast("Type is in use — delete those items first"); return; }
+    if (state.types.length < 2){ toast("Keep at least one type"); return; }
+    state.types = state.types.filter(function(t){ return t.id !== editing.id; });
+    state.activeType = state.types[0].id;
+    dlg.close(); hint(); save(); draw();
+  });
+
+  /* ---------- grid controls ---------- */
+  ["cols","rows","zoom","meters"].forEach(function(id){
+    $(id).addEventListener("change", function(){
+      var v = Number(this.value) || 1;
+      if (id === "zoom") state.cell = Math.max(10, Math.min(60, v));
+      else if (id === "meters") state.meters = v;
+      else {
+        state[id] = Math.max(4, Math.min(140, Math.round(v)));
+        state.items = state.items.filter(function(i){
+          return i.orient ? (i.x <= state.cols && i.y <= state.rows)
+                          : (i.x+i.w <= state.cols && i.y+i.h <= state.rows);
+        });
+      }
+      this.value = (id === "zoom") ? state.cell : (id === "meters" ? state.meters : state[id]);
+      select(null); save(); draw();
+    });
+  });
+  $("title").addEventListener("input", function(){ state.title = this.value; save(); });
+
+  $("renumBtn").addEventListener("click", function(){
+    var counters = {};
+    itemsOf("stall").slice().sort(function(a,b){ return a.y-b.y || a.x-b.x; }).forEach(function(it){
+      var t = typeById(it.type);
+      if (!t.prefix) return;
+      counters[t.prefix] = (counters[t.prefix]||0)+1;
+      it.label = t.prefix + counters[t.prefix];
+    });
+    if (sel) select(sel);
+    save(); draw(); toast("Stalls renumbered top to bottom, left to right");
+  });
+  $("clearBtn").addEventListener("click", function(){
+    if (!state.items.length) return;
+    if (!confirm("Delete everything on the layout?")) return;
+    state.items = []; select(null); save(); draw();
+  });
+
+  /* ---------- export ---------- */
+  function buildExport(scale){
+    scale = scale || 1;
+    var cs = 28*scale, pad = 26*scale;
+    var gridW = state.cols*cs, gridH = state.rows*cs;
+    var used = state.types.filter(function(t){ return countOf(t.id) > 0; });
+    var rows = Math.ceil(used.length/3);
+    var titleH = 48*scale, legendH = rows*26*scale + 16*scale;
+    var W = gridW + pad*2, H = titleH + gridH + legendH + pad*2;
+
+    var c = document.createElement("canvas");
+    c.width = Math.round(W); c.height = Math.round(H);
+    var g = c.getContext("2d");
+    g.fillStyle = "#FFFDF9"; g.fillRect(0,0,W,H);
+    g.fillStyle = "#070F21"; g.textAlign = "left"; g.textBaseline = "alphabetic";
+    g.font = "700 " + (22*scale) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
+    g.fillText(state.title || "Stall layout", pad, pad + 22*scale);
+    g.fillStyle = "rgba(7,15,33,.6)";
+    g.font = (12*scale) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
+    g.fillText(itemsOf("stall").length + " stalls · " + itemsOf("zone").length + " areas · grid " +
+               state.cols + " × " + state.rows + " · 1 box = " + state.meters + " m",
+               pad, pad + 40*scale);
+    g.save(); g.translate(pad, pad + titleH); paint(g, cs, {noSel:true}); g.restore();
+
+    var ly = pad + titleH + gridH + 22*scale;
+    used.forEach(function(t, i){
+      var col = i%3, row = Math.floor(i/3);
+      var x = pad + col*(gridW/3), y = ly + row*26*scale;
+      g.fillStyle = t.color; g.fillRect(x, y-10*scale, 13*scale, 13*scale);
+      g.strokeStyle = "rgba(7,15,33,.35)"; g.lineWidth = 1;
+      g.strokeRect(x+.5, y-10*scale+.5, 13*scale-1, 13*scale-1);
+      g.fillStyle = "#070F21";
+      g.font = (13*scale) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
+      var txt = t.name + " — " + countOf(t.id) + (t.kind==="stall" ? " stalls" : "");
+      if (t.rate) txt += " · \u20B9" + Number(t.rate).toLocaleString("en-IN");
+      g.fillText(txt, x + 19*scale, y + scale);
+    });
+    return c;
+  }
+  function download(href, name){
+    var a = document.createElement("a");
+    a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  }
+  function slug(){
+    return (state.title||"stall-layout").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"") || "stall-layout";
+  }
+  $("pngBtn").addEventListener("click", function(){
+    download(buildExport(2).toDataURL("image/png"), slug()+".png"); toast("PNG saved");
+  });
+  $("pdfBtn").addEventListener("click", function(){
+    if (!window.jspdf || !window.jspdf.jsPDF){ toast("PDF library did not load — check your connection"); return; }
+    var c = buildExport(2), landscape = c.width >= c.height;
+    var pdf = new window.jspdf.jsPDF({ orientation: landscape?"landscape":"portrait", unit:"mm", format:"a4" });
+    var pw = pdf.internal.pageSize.getWidth(), ph = pdf.internal.pageSize.getHeight(), m = 8;
+    var s = Math.min((pw-m*2)/c.width, (ph-m*2)/c.height);
+    pdf.addImage(c.toDataURL("image/jpeg", .94), "JPEG", (pw-c.width*s)/2, (ph-c.height*s)/2, c.width*s, c.height*s);
+    pdf.save(slug()+".pdf"); toast("PDF saved");
+  });
+  function exportObject(){
+    return {
+      title: state.title,
+      layout_version: new Date().toISOString().slice(0,10),
+      grid: { cols: state.cols, rows: state.rows, meters_per_box: state.meters },
+      types: state.types.map(function(t){
+        return { name:t.name, kind:t.kind, prefix:t.prefix, color:t.color, rate:t.rate, count: countOf(t.id) };
+      }),
+      stalls: itemsOf("stall").map(function(i){
+        var t = typeById(i.type);
+        return { stall:i.label, category:t.name, prefix:t.prefix, x:i.x, y:i.y, w:i.w, h:i.h, z:i.z,
+                 size_m: (i.w*state.meters)+"x"+(i.h*state.meters) };
+      }),
+      areas: itemsOf("zone").map(function(i){
+        return { name:i.label, type: typeById(i.type).name, x:i.x, y:i.y, w:i.w, h:i.h, z:i.z };
+      }),
+      paths: itemsOf("path").map(function(i){
+        return { name:i.label, x:i.x, y:i.y, w:i.w, h:i.h, z:i.z };
+      }),
+      barricades: itemsOf("barricade").map(function(i){
+        return { orient:i.orient, x:i.x, y:i.y, length:i.len, z:i.z };
+      })
+    };
+  }
+  $("jsonBtn").addEventListener("click", function(){
+    var blob = new Blob([JSON.stringify(exportObject(),null,2)], {type:"application/json"});
+    var url = URL.createObjectURL(blob);
+    download(url, slug()+".json");
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+    toast("JSON exported");
+  });
+
+  function applyExport(d){
+        if (!d || !d.stalls) throw new Error("bad");
+        state.title = d.title || state.title;
+        if (d.grid){ state.cols=d.grid.cols||state.cols; state.rows=d.grid.rows||state.rows;
+                     state.meters=d.grid.meters_per_box||state.meters; }
+        var src = d.types || d.categories;
+        if (src && src.length){
+          state.types = src.map(function(t,i){
+            return { id:"t"+i, name:t.name, kind:t.kind||"stall", prefix:t.prefix||"",
+                     color:t.color||"#E9A031", rate:t.rate||null };
+          });
+        }
+        function typeNamed(name, kind){
+          var m = state.types.filter(function(t){ return t.name===name && (!kind || t.kind===kind); })[0];
+          if (m) return m;
+          m = { id:"t"+Date.now().toString(36)+state.types.length, name:name||kind, kind:kind||"stall",
+                prefix:"", color:"#9AA0AA", rate:null };
+          state.types.push(m); return m;
+        }
+        state.items = [];
+        (d.stalls||[]).forEach(function(s){
+          state.items.push({ id:uid(), type: typeNamed(s.category,"stall").id, x:s.x, y:s.y, w:s.w, h:s.h,
+                             z: s.z || BASE_Z.stall, label:s.stall });
+        });
+        (d.areas||[]).forEach(function(a){
+          state.items.push({ id:uid(), type: typeNamed(a.type||a.name,"zone").id, x:a.x, y:a.y, w:a.w, h:a.h,
+                             z: a.z || BASE_Z.zone, label:a.name });
+        });
+        (d.paths||[]).forEach(function(p){
+          state.items.push({ id:uid(), type: typeNamed("Walkway","path").id, x:p.x, y:p.y, w:p.w, h:p.h,
+                             z: p.z || BASE_Z.path, label:p.name||"Walkway" });
+        });
+        (d.barricades||[]).forEach(function(b){
+          state.items.push({ id:uid(), type: typeNamed("Barricade","barricade").id, orient:b.orient,
+                             x:b.x, y:b.y, len:b.length, z: b.z || BASE_Z.barricade, label:"Barricade" });
+        });
+        state.activeType = state.types[0].id;
+        $("title").value = state.title; $("cols").value = state.cols;
+        $("rows").value = state.rows; $("meters").value = state.meters;
+        select(null); hint(); save(); draw();
+  }
+  $("loadBtn").addEventListener("click", function(){ $("file").click(); });
+  $("file").addEventListener("change", function(){
+    var f = this.files && this.files[0]; if (!f) return;
+    var fr = new FileReader();
+    fr.onload = function(){
+      try { applyExport(JSON.parse(fr.result)); setDoc(null, state.title); toast("Layout loaded"); }
+      catch(err){ toast("That file is not a layout export"); }
+    };
+    fr.readAsText(f); this.value = "";
+  });
+
+
+  /* ---------- designs on the server ---------- */
+  var doc = { id:null, name:"" };
+  var srv = { reachable:false, storage:false, authed:false };
+
+  function setDoc(id, name){
+    doc.id = id || null; doc.name = name || "";
+    state.docId = doc.id; state.docName = doc.name;
+    save(); showDoc();
+  }
+  function showDoc(){
+    $("docName").textContent = doc.id ? ("Saved · " + doc.name)
+                                      : (doc.name ? doc.name + " · unsaved" : "");
+  }
+  function api(path, opts){
+    var o = Object.assign({ credentials:"same-origin",
+                            headers:{ "Content-Type":"application/json" } }, opts || {});
+    return fetch(path, o).then(function(r){
+      return r.text().then(function(t){
+        var d = null; try { d = JSON.parse(t); } catch(e){}
+        if (!d) throw { offline:true, message:"Server not available" };
+        if (!r.ok) throw { status:r.status, message: d.error || ("Error " + r.status) };
+        return d;
+      });
+    }, function(){ throw { offline:true, message:"Server not available" }; });
+  }
+  function refreshStatus(){
+    return api("/api/auth").then(function(d){
+      srv.reachable = true; srv.storage = !!d.storage; srv.authed = !!d.authed;
+    }, function(){ srv.reachable = false; srv.storage = false; srv.authed = false; });
+  }
+
+  function renderSrv(){
+    var note = $("srvNote"), lock = $("srvLock"), main = $("srvMain");
+    lock.hidden = true; main.hidden = true;
+    if (!srv.reachable){
+      note.textContent = "Server saving runs once this is deployed on Vercel. Here you can still use Export JSON and Open JSON.";
+      return;
+    }
+    if (!srv.storage){
+      note.textContent = "Blob storage is not connected yet. In the Vercel dashboard open Storage, create a Blob store, link it to this project and redeploy.";
+      return;
+    }
+    if (!srv.authed){
+      note.textContent = "Enter the password to create, save or edit designs.";
+      lock.hidden = false; $("srvPass").value = ""; setTimeout(function(){ $("srvPass").focus(); }, 30);
+      return;
+    }
+    note.textContent = doc.id ? ("Editing “" + doc.name + "”. Save updates it, Save as new keeps both.")
+                              : "This layout is not on the server yet. Give it a name and save.";
+    main.hidden = false;
+    $("srvName").value = doc.name || state.title;
+    loadList();
+  }
+
+  function loadList(){
+    var box = $("srvList");
+    box.innerHTML = '<p class="empty">Loading…</p>';
+    api("/api/designs").then(function(d){
+      var rows = d.designs || [];
+      if (!rows.length){ box.innerHTML = '<p class="empty">No designs saved yet.</p>'; return; }
+      box.innerHTML = rows.map(function(r){
+        var when = new Date(r.updated);
+        var meta = (r.stalls || 0) + " stalls · " +
+          (isNaN(when) ? "" : when.toLocaleDateString() + " " +
+            when.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"}));
+        return '<div class="drow"><div class="dn"><b>' + esc(r.name) + '</b><span>' + meta +
+               (r.id === doc.id ? " · open" : "") + '</span></div>' +
+               '<button class="mini" data-open="' + r.id + '">Open</button>' +
+               '<button class="mini danger" data-del="' + r.id + '">Delete</button></div>';
+      }).join("");
+      Array.prototype.forEach.call(box.querySelectorAll("[data-open]"), function(b){
+        b.addEventListener("click", function(){ openDesign(b.dataset.open); });
+      });
+      Array.prototype.forEach.call(box.querySelectorAll("[data-del]"), function(b){
+        b.addEventListener("click", function(){ deleteDesign(b.dataset.del); });
+      });
+    }, function(err){ box.innerHTML = '<p class="empty">' + esc(err.message) + '</p>'; });
+  }
+  function esc(t){
+    return String(t == null ? "" : t).replace(/[&<>"]/g, function(c){
+      return { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c];
+    });
+  }
+
+  function openDesign(id){
+    api("/api/designs?id=" + encodeURIComponent(id)).then(function(d){
+      try {
+        applyExport(d.design.data);
+        setDoc(d.design.id, d.design.name);
+        renderSrv(); toast("Opened “" + d.design.name + "”");
+      } catch(e){ toast("That saved design could not be read"); }
+    }, function(err){ toast(err.message); });
+  }
+  function saveDesign(asNew){
+    var name = ($("srvName").value || "").trim() || state.title || "Untitled layout";
+    var payload = { id: asNew ? null : doc.id, name: name, data: exportObject() };
+    api("/api/designs", { method:"POST", body: JSON.stringify(payload) }).then(function(d){
+      setDoc(d.id, d.name);
+      renderSrv(); toast(asNew ? "Saved as a new design" : "Design saved");
+    }, function(err){
+      if (err.status === 401){ srv.authed = false; renderSrv(); toast("Unlock with the password first"); }
+      else toast(err.message);
+    });
+  }
+  function deleteDesign(id){
+    if (!confirm("Delete this saved design from the server?")) return;
+    api("/api/designs?id=" + encodeURIComponent(id), { method:"DELETE" }).then(function(){
+      if (doc.id === id) setDoc(null, doc.name);
+      renderSrv(); toast("Deleted");
+    }, function(err){ toast(err.message); });
+  }
+
+  $("designsBtn").addEventListener("click", function(){
+    $("srvDlg").showModal();
+    $("srvNote").textContent = "Checking the server…";
+    refreshStatus().then(renderSrv);
+  });
+  $("srvUnlock").addEventListener("click", function(){
+    var pass = $("srvPass").value;
+    if (!pass) return;
+    api("/api/auth", { method:"POST", body: JSON.stringify({ password: pass }) }).then(function(){
+      srv.authed = true; renderSrv(); toast("Unlocked");
+    }, function(err){ toast(err.message || "Wrong password"); });
+  });
+  $("srvPass").addEventListener("keydown", function(e){ if (e.key === "Enter") $("srvUnlock").click(); });
+  $("srvSave").addEventListener("click", function(){ saveDesign(false); });
+  $("srvSaveAs").addEventListener("click", function(){ saveDesign(true); });
+  $("srvNew").addEventListener("click", function(){
+    if (state.items.length && !confirm("Start a new empty design? The current one stays saved on the server if you saved it.")) return;
+    state.items = []; select(null);
+    setDoc(null, "Untitled layout");
+    $("srvName").value = "Untitled layout";
+    save(); draw(); renderSrv(); toast("New design started");
+  });
+  $("srvLogout").addEventListener("click", function(){
+    api("/api/auth", { method:"DELETE" }).then(function(){
+      srv.authed = false; renderSrv(); toast("Locked");
+    }, function(){ toast("Could not lock"); });
+  });
+  $("srvClose").addEventListener("click", function(){ $("srvDlg").close(); });
+  $("srvClose2").addEventListener("click", function(){ $("srvDlg").close(); });
+
+  /* ---------- start ---------- */
+  restore();
+  $("title").value = state.title; $("cols").value = state.cols;
+  $("rows").value = state.rows; $("zoom").value = state.cell; $("meters").value = state.meters;
+  doc.id = state.docId || null; doc.name = state.docName || "";
+  showDoc(); hint(); renderTypes(); draw();
+  refreshStatus();
+})();
+</script>
+</body>
+</html>
