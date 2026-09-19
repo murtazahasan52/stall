@@ -45,6 +45,9 @@ Click anything to select it. Then:
   click places a stall inside the area instead.
 - **Resize** — drag the square handles on its edges and corners. A barricade has
   a handle at each end to change its length.
+- **Number** — click a stall and its number appears in a small box right above
+  it, already selected. Type the new number and press Enter. Escape puts the old
+  one back. The panel field stays in sync either way.
 - **Size** — a dropdown in the panel switches the selected stall between its
   type's sub types. Position comes from dragging, not typed numbers.
 - **Layer** — Back / – / + / Front control the stacking order, so you can put a
@@ -54,6 +57,12 @@ Click anything to select it. Then:
   nudge the selection, Delete removes it.
 
 "Renumber stalls" renumbers every stall top to bottom, left to right within each series.
+
+**Undo** (button, or Ctrl/Cmd+Z) steps back through the last 40 changes — placing,
+deleting, renumbering, clearing, opening a file.
+
+The Columns and Rows boxes never delete anything. Ask for fewer than the layout
+needs and they stop at the smallest size that still holds every item, and say so.
 
 Set "1 box =" to the real metre value and every item shows its true size.
 Work is kept in the browser, so a refresh does not lose the layout.

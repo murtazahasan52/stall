@@ -42,6 +42,11 @@
   .cwrap{position:relative;display:inline-block;line-height:0}
   canvas{display:block;touch-action:none;cursor:crosshair;border-radius:4px}
   #ov{position:absolute;left:0;top:0;pointer-events:none;background:transparent}
+  .inlineEdit{position:absolute;z-index:5;width:auto;min-width:66px;
+    font:650 13px "Segoe UI",Roboto,system-ui,sans-serif;text-align:center;
+    padding:4px 8px;border:1.5px solid var(--amber);border-radius:8px;
+    background:#FFFDF9;color:#070F21;box-shadow:0 3px 10px rgba(7,15,33,.22)}
+  .inlineEdit:focus{outline:2px solid var(--amber);outline-offset:1px}
   h2{font-size:12px;font-weight:600;color:var(--muted);margin:0 0 8px;letter-spacing:.02em}
   .block{margin-bottom:20px}
   .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -196,6 +201,7 @@
     <div class="block">
       <h2>Layout</h2>
       <div class="btns">
+        <button id="undoBtn">Undo</button>
         <button id="renumBtn">Renumber stalls</button>
         <button id="flatBtn">One colour per category</button>
         <button class="danger" id="clearBtn">Clear all</button>
@@ -204,7 +210,7 @@
   </aside>
 
   <section class="stage">
-    <div class="stageInner"><div class="cwrap"><canvas id="cv"></canvas><canvas id="ov"></canvas></div></div>
+    <div class="stageInner"><div class="cwrap"><canvas id="cv"></canvas><canvas id="ov"></canvas><input id="inlineLabel" class="inlineEdit" hidden></div></div>
   </section>
 </main>
 
@@ -630,6 +636,7 @@
     octx.setTransform(curDPR,0,0,curDPR,0,0);
     octx.clearRect(0, 0, W, H);
     paintOverlay(octx, cs);
+    if (document.activeElement !== inl) placeInline();
     if (withStats) renderStats();
   }
 
@@ -764,11 +771,13 @@
     var h = handleAt(p);
     if (h && sel){
       drag = { mode:"resize", handle:h, orig: clone(sel), start:p, previewItem: clone(sel), ok:true, preview:true };
+      inl.hidden = true;
       return;
     }
     var hit = hitAt(p);
     if (hit && sel && hit.id === sel.id){
       drag = { mode:"move", orig: clone(sel), start:p, previewItem: clone(sel), ok:true, preview:false };
+      inl.hidden = true;
       return;
     }
     drag = { mode:"draw", start:p, hit:hit, preview:false, ok:true,
@@ -833,7 +842,7 @@
       var type = typeById(state.activeType), pi = d.previewItem, r = d.rectRaw;
       var single = (r.w === 1 && r.h === 1);
       if (single && d.hit && type.kind !== "barricade" && selectableHit(d.hit, type)){
-        select(d.hit); overlay(); return;
+        select(d.hit, kindOf(d.hit) === "stall"); overlay(); return;
       }
       if (type.kind === "barricade"){
         var bar = { id: uid(), type: type.id, label: type.name, z: BASE_Z.barricade,
@@ -847,6 +856,7 @@
           draw(); return;
         }
         var made = null;
+        snapshot();
         d.tiles.forEach(function(t){
           var one = { id: uid(), type: type.id, x:t.x, y:t.y, w:t.w, h:t.h,
                       z: BASE_Z[type.kind], label: nextLabel(type), face: type.face || "n",
@@ -862,6 +872,7 @@
                                     : "Areas and pathways cannot overlap each other");
         draw(); return;
       }
+      snapshot();
       var item = { id: uid(), type: type.id, x:pi.x, y:pi.y, w:pi.w, h:pi.h,
                    z: BASE_Z[type.kind], label: nextLabel(type), face: type.face || "n",
                    color: freshColor(type) };
@@ -899,6 +910,9 @@
   window.addEventListener("pointerup", function(){ if (drag){ drag = null; overlay(); } });
 
   document.addEventListener("keydown", function(e){
+    if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z")){
+      e.preventDefault(); undo(); return;
+    }
     if (/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
     if (!sel) return;
     if (e.key === "Delete" || e.key === "Backspace"){ e.preventDefault(); removeSel(); return; }
@@ -926,10 +940,10 @@
   });
 
   /* ---------- selection panel ---------- */
-  function select(item){
+  function select(item, focusLabel){
     sel = item;
     var box = $("selBox");
-    if (!item){ box.hidden = true; return; }
+    if (!item){ box.hidden = true; inl.hidden = true; return; }
     box.hidden = false;
     var kind = kindOf(item), isBar = !!item.orient;
     $("selLabel").value = item.label || "";
@@ -966,9 +980,67 @@
         " × " + (item.h*state.meters) + " m" + (rate ? "  ·  \u20B9" + Number(rate).toLocaleString("en-IN") : "");
     }
     $("zVal").textContent = item.z;
+    inl.value = item.label || "";
+    placeInline();
+    if (focusLabel) editLabel();
   }
+  var inl = $("inlineLabel"), inlWas = "";
+  function placeInline(){
+    if (!sel || kindOf(sel) !== "stall" || state.items.indexOf(sel) === -1 || drag){
+      inl.hidden = true; return;
+    }
+    var cs = state.cell, r = screenRect(sel, cs);
+    inl.hidden = false;
+    inl.style.minWidth = Math.max(66, r.w) + "px";
+    inl.style.left = Math.max(0, r.x) + "px";
+    var top = r.y - 34;
+    inl.style.top = (top < 0 ? r.y + r.h + 6 : top) + "px";
+  }
+  function editLabel(){
+    if (inl.hidden) return;
+    inlWas = sel ? (sel.label || "") : "";
+    inl.focus(); inl.select();
+  }
+  inl.addEventListener("input", function(){
+    if (!sel) return;
+    sel.label = this.value;
+    $("selLabel").value = this.value;
+    draw(); placeInline();
+  });
+  inl.addEventListener("keydown", function(e){
+    if (e.key === "Enter"){ e.preventDefault(); this.blur(); save(); }
+    else if (e.key === "Escape"){
+      e.preventDefault();
+      if (sel){ sel.label = inlWas; $("selLabel").value = inlWas; this.value = inlWas; draw(); }
+      this.blur();
+    }
+    e.stopPropagation();
+  });
+  inl.addEventListener("blur", function(){ save(); });
+
+  var history = [];
+  function snapshot(){
+    try {
+      history.push(JSON.stringify({ items: state.items, types: state.types,
+                                    cols: state.cols, rows: state.rows }));
+      if (history.length > 40) history.shift();
+    } catch(e){}
+  }
+  function undo(){
+    var last = history.pop();
+    if (!last){ toast("Nothing to undo"); return; }
+    try {
+      var h = JSON.parse(last);
+      state.items = h.items; state.types = h.types;
+      state.cols = h.cols; state.rows = h.rows;
+      $("cols").value = state.cols; $("rows").value = state.rows;
+      select(null); save(); draw(); toast("Undone");
+    } catch(e){ toast("Could not undo"); }
+  }
+
   function removeSel(){
     if (!sel) return;
+    snapshot();
     state.items = state.items.filter(function(i){ return i.id !== sel.id; });
     select(null); save(); draw();
   }
@@ -980,7 +1052,10 @@
     if (!fits(kindOf(n), n, n.id)){ toast("No room for that size here"); select(sel); return; }
     sel.w = z.w; sel.h = z.h; select(sel); save(); draw();
   });
-  $("selLabel").addEventListener("input", function(){ if (sel){ sel.label = this.value; save(); draw(); } });
+  $("selLabel").addEventListener("input", function(){
+    if (!sel) return;
+    sel.label = this.value; inl.value = this.value; save(); draw();
+  });
   $("selType").addEventListener("change", function(){ if (sel){ sel.type = this.value; save(); draw(); } });
   $("selFace").addEventListener("change", function(){
     if (!sel) return;
@@ -1219,26 +1294,45 @@
   });
 
   /* ---------- grid controls ---------- */
+  // how far right / down the layout actually reaches
+  function usedExtent(){
+    var maxX = 4, maxY = 4;
+    state.items.forEach(function(i){
+      var b = boxOf(i);
+      maxX = Math.max(maxX, b.x + Math.max(b.w, 1));
+      maxY = Math.max(maxY, b.y + Math.max(b.h, 1));
+    });
+    return { cols: maxX, rows: maxY };
+  }
   ["cols","rows","zoom","meters"].forEach(function(id){
     $(id).addEventListener("change", function(){
-      var v = Number(this.value) || 1;
-      if (id === "zoom") state.cell = Math.max(10, Math.min(60, v));
+      var raw = String(this.value).trim();
+      var v = Number(raw);
+      if (!raw || isNaN(v) || v <= 0){            // empty or nonsense — put it back
+        this.value = (id === "zoom") ? state.cell : (id === "meters" ? state.meters : state[id]);
+        return;
+      }
+      if (id === "zoom") state.cell = Math.max(10, Math.min(60, Math.round(v)));
       else if (id === "meters") state.meters = v;
       else {
-        state[id] = Math.max(4, Math.min(140, Math.round(v)));
-        state.items = state.items.filter(function(i){
-          return i.orient ? (i.x <= state.cols && i.y <= state.rows)
-                          : (i.x+i.w <= state.cols && i.y+i.h <= state.rows);
-        });
+        var want = Math.max(4, Math.min(140, Math.round(v)));
+        var need = usedExtent()[id];
+        if (want < need){                          // never cut stalls off the board
+          want = need;
+          toast("Kept " + need + " " + id + " — the layout reaches that far. Delete those items first to shrink further.");
+        }
+        state[id] = want;
       }
       this.value = (id === "zoom") ? state.cell : (id === "meters" ? state.meters : state[id]);
-      select(null); save(); draw();
+      save(); draw();
     });
   });
   $("title").addEventListener("input", function(){ state.title = this.value; save(); });
 
+  $("undoBtn").addEventListener("click", undo);
   $("renumBtn").addEventListener("click", function(){
     var counters = {};
+    snapshot();
     itemsOf("stall").slice().sort(function(a,b){ return a.y-b.y || a.x-b.x; }).forEach(function(it){
       var t = typeById(it.type);
       if (!t.prefix) return;
@@ -1251,6 +1345,7 @@
   $("clearBtn").addEventListener("click", function(){
     if (!state.items.length) return;
     if (!confirm("Delete everything on the layout?")) return;
+    snapshot();
     state.items = []; select(null); save(); draw();
   });
 
@@ -1377,6 +1472,7 @@
 
   function applyExport(d){
         if (!d || !d.stalls) throw new Error("bad");
+        snapshot();
         state.title = d.title || state.title;
         if (d.grid){ state.cols=d.grid.cols||state.cols; state.rows=d.grid.rows||state.rows;
                      state.meters=d.grid.meters_per_box||state.meters; }
@@ -1642,6 +1738,7 @@
   $("srvSaveAs").addEventListener("click", function(){ saveDesign(true); });
   $("srvNew").addEventListener("click", function(){
     if (state.items.length && !confirm("Start a new empty design? The current one stays saved on the server if you saved it.")) return;
+    snapshot();
     state.items = []; select(null);
     setDoc(null, "Untitled layout");
     $("srvName").value = "Untitled layout";
