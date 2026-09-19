@@ -7,9 +7,14 @@ pathways and barricades — and saving it as PNG, PDF or JSON.
 
 Pick a type in the left panel, then drag on the grid.
 
-- **Stalls** — numbered and counted. Drag three boxes across by three down to get
-  one 3 x 3 stall. Each new stall takes the next free number in its series
-  (T1, T2, T3…). Types included: Regular (Y), Ruby (L), Premium (T), Food stall (F).
+- **Stalls** — numbered and counted. Each new stall takes the next free number in
+  its series (T1, T2, T3…). Types included: Regular (Y) 3 x 3, Ruby (L) 3 x 3,
+  Premium (T) 6 x 6, Food stall (F) 3 x 3.
+  A type can carry its own stall size. With Regular set to 3 x 3, one click drops
+  a 3 x 3 stall, and dragging across an empty run fills it with a whole row or
+  block of 3 x 3 stalls at once. Set the size to 0 x 0 in the type to go back to
+  dragging each stall's size by hand. Add or edit a type with the buttons under
+  the list — name, what it is, prefix, rate, colour and size are all there.
 - **Areas** — Food Court, Play Zone, Stage. Block out the whole area first, then
   switch to a stall type and draw stalls inside it. Stalls sit on top of an area;
   areas cannot overlap each other.
@@ -20,6 +25,9 @@ Pick a type in the left panel, then drag on the grid.
 Click anything to select it. Then:
 
 - **Move** — drag the selected item anywhere it fits.
+- **Selecting** — clicking a stall always selects it. Clicking an area or pathway
+  selects it while that kind is the active type; with a stall type active the
+  click places a stall inside the area instead.
 - **Resize** — drag the square handles on its edges and corners. A barricade has
   a handle at each end to change its length.
 - **Edit exactly** — X, Y, width and height boxes in the panel take typed values.

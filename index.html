@@ -201,6 +201,11 @@
     </select>
   </label>
   <label class="f" style="margin-bottom:10px">Number prefix (stalls only)<input type="text" id="dPrefix" placeholder="Y" maxlength="4"></label>
+  <div class="row" id="dSizeRow" style="margin-bottom:6px">
+    <label class="f">Width in boxes<input type="number" id="dW" min="0" max="60" value="0"></label>
+    <label class="f">Height in boxes<input type="number" id="dH" min="0" max="60" value="0"></label>
+  </div>
+  <p class="note" id="dSizeHint">Set 3 × 3 and every click drops a 3 × 3 stall. Drag to fill a row or block with them. Leave both 0 to drag each size by hand.</p>
   <label class="f" style="margin-bottom:10px">Rate per stall (optional)<input type="number" id="dRate" min="0" step="500"></label>
   <label class="f" style="margin-bottom:14px;flex:none">Colour<input type="color" id="dColor" value="#E9A031"></label>
   <div class="btns">
@@ -257,10 +262,10 @@
     title:"Business Expo — Nagpur",
     cols:44, rows:30, cell:22, meters:1,
     types:[
-      {id:"t1", name:"Regular",    kind:"stall", prefix:"Y", color:"#E9A031", rate:53000},
-      {id:"t2", name:"Ruby",       kind:"stall", prefix:"L", color:"#C2476A", rate:24000},
-      {id:"t3", name:"Premium",    kind:"stall", prefix:"T", color:"#1F3B73", rate:null},
-      {id:"t4", name:"Food stall", kind:"stall", prefix:"F", color:"#B8740F", rate:null},
+      {id:"t1", name:"Regular",    kind:"stall", prefix:"Y", color:"#E9A031", rate:53000, bw:3, bh:3},
+      {id:"t2", name:"Ruby",       kind:"stall", prefix:"L", color:"#C2476A", rate:24000, bw:3, bh:3},
+      {id:"t3", name:"Premium",    kind:"stall", prefix:"T", color:"#1F3B73", rate:null, bw:6, bh:6},
+      {id:"t4", name:"Food stall", kind:"stall", prefix:"F", color:"#B8740F", rate:null, bw:3, bh:3},
       {id:"t5", name:"Food Court", kind:"zone",  prefix:"",  color:"#E4C9A0", rate:null},
       {id:"t6", name:"Play Zone",  kind:"zone",  prefix:"",  color:"#9FD2C4", rate:null},
       {id:"t7", name:"Stage",      kind:"zone",  prefix:"",  color:"#B3A8D6", rate:null},
@@ -464,7 +469,21 @@
       });
     }
 
-    if (drag && drag.preview){
+    if (drag && drag.preview && drag.tiles){
+      g.setLineDash([]);
+      drag.tiles.forEach(function(t){
+        g.fillStyle = "rgba(233,160,49,.32)";
+        g.fillRect(t.x*cs, t.y*cs, t.w*cs, t.h*cs);
+        g.strokeStyle = "#B8740F"; g.lineWidth = 2;
+        g.strokeRect(t.x*cs+1, t.y*cs+1, t.w*cs-2, t.h*cs-2);
+      });
+      if (!drag.tiles.length){
+        var rr0 = drag.rectRaw;
+        g.fillStyle = "rgba(192,57,43,.28)";
+        g.fillRect(rr0.x*cs, rr0.y*cs, rr0.w*cs, rr0.h*cs);
+      }
+    }
+    else if (drag && drag.preview){
       var pr = drag.previewItem;
       var r2 = screenRect(pr, cs);
       g.fillStyle = drag.ok ? "rgba(233,160,49,.32)" : "rgba(192,57,43,.28)";
@@ -516,6 +535,47 @@
   }
   function clone(it){ return JSON.parse(JSON.stringify(it)); }
 
+  // types with a fixed box size stamp that size instead of taking the dragged size
+  function tilesFor(r, type){
+    var bw = Math.max(1, type.bw|0), bh = Math.max(1, type.bh|0), out = [];
+    var acrossN = Math.max(1, Math.floor(r.w / bw)), downN = Math.max(1, Math.floor(r.h / bh));
+    for (var j=0; j<downN; j++){
+      for (var i=0; i<acrossN; i++){
+        var t = { x: r.x + i*bw, y: r.y + j*bh, w: bw, h: bh };
+        if (fits(type.kind, t, null)) out.push(t);
+      }
+    }
+    return out;
+  }
+  function fixedSize(type){ return type.kind !== "barricade" && type.bw > 0 && type.bh > 0; }
+  // a plain click selects a stall, or an area/pathway while that kind is the active type;
+  // clicking an area with a stall type active places a stall inside it instead
+  function selectableHit(hit, type){
+    var k = kindOf(hit);
+    return k === "stall" || k === type.kind;
+  }
+
+  function updateDrawPreview(){
+    var type = typeById(state.activeType), r = drag.rectRaw;
+    var single = (r.w === 1 && r.h === 1);
+    drag.tiles = null;
+    if (type.kind === "barricade"){
+      var line = r.w >= r.h ? {orient:"h", x:r.x, y:r.y, len:r.w} : {orient:"v", x:r.x, y:r.y, len:r.h};
+      drag.previewItem = { type:type.id, orient:line.orient, x:line.x, y:line.y, len:line.len };
+      drag.ok = true; drag.preview = true; return;
+    }
+    if (single && drag.hit && selectableHit(drag.hit, type)){ drag.preview = false; return; }
+    if (fixedSize(type)){
+      drag.tiles = tilesFor(r, type);
+      drag.ok = drag.tiles.length > 0;
+      drag.previewItem = { type:type.id, x:r.x, y:r.y, w:Math.max(1,type.bw), h:Math.max(1,type.bh) };
+    } else {
+      drag.previewItem = { type:type.id, x:r.x, y:r.y, w:r.w, h:r.h };
+      drag.ok = fits(type.kind, r, null);
+    }
+    drag.preview = true;
+  }
+
   cv.addEventListener("pointerdown", function(e){
     var p = pos(e);
     if (p.x<0||p.y<0||p.x>=state.cols||p.y>=state.rows) return;
@@ -531,7 +591,9 @@
       return;
     }
     drag = { mode:"draw", start:p, hit:hit, preview:false, ok:true,
+             rectRaw:{ x:p.x, y:p.y, w:1, h:1 },
              previewItem:{ x:p.x, y:p.y, w:1, h:1 } };
+    updateDrawPreview();
     draw();
   });
 
@@ -542,16 +604,8 @@
     p.y = Math.max(0, Math.min(state.rows-1, p.y));
 
     if (drag.mode === "draw"){
-      var r = rectOf(drag.start, p), kind = typeById(state.activeType).kind;
-      if (kind === "barricade"){
-        var line = r.w >= r.h ? {orient:"h", x:r.x, y:r.y, len:r.w} : {orient:"v", x:r.x, y:r.y, len:r.h};
-        drag.previewItem = { type: state.activeType, orient: line.orient, x: line.x, y: line.y, len: line.len };
-        drag.ok = true;
-      } else {
-        drag.previewItem = { type: state.activeType, x:r.x, y:r.y, w:r.w, h:r.h };
-        drag.ok = fits(kind, r, null);
-      }
-      drag.preview = !(r.w===1 && r.h===1 && drag.hit && kind !== "barricade");
+      drag.rectRaw = rectOf(drag.start, p);
+      updateDrawPreview();
     }
     else if (drag.mode === "move"){
       var dx = p.x - drag.start.x, dy = p.y - drag.start.y;
@@ -594,13 +648,30 @@
     var d = drag; drag = null;
 
     if (d.mode === "draw"){
-      var type = typeById(state.activeType), pi = d.previewItem;
-      var single = (pi.w === 1 && pi.h === 1 && !pi.orient);
-      if (single && d.hit && type.kind !== "barricade"){ select(d.hit); draw(); return; }
+      var type = typeById(state.activeType), pi = d.previewItem, r = d.rectRaw;
+      var single = (r.w === 1 && r.h === 1);
+      if (single && d.hit && type.kind !== "barricade" && selectableHit(d.hit, type)){
+        select(d.hit); draw(); return;
+      }
       if (type.kind === "barricade"){
         var bar = { id: uid(), type: type.id, label: type.name, z: BASE_Z.barricade,
                     orient: pi.orient, x: pi.x, y: pi.y, len: Math.max(1, pi.len) };
         state.items.push(bar); select(bar); save(); draw(); return;
+      }
+      if (d.tiles){
+        if (!d.tiles.length){
+          toast("No room for a " + type.bw + " × " + type.bh + " " + type.name.toLowerCase() + " there");
+          draw(); return;
+        }
+        var made = null;
+        d.tiles.forEach(function(t){
+          var one = { id: uid(), type: type.id, x:t.x, y:t.y, w:t.w, h:t.h,
+                      z: BASE_Z[type.kind], label: nextLabel(type) };
+          state.items.push(one); made = one;
+        });
+        select(made); save(); draw();
+        if (d.tiles.length > 1) toast("Placed " + d.tiles.length + " × " + type.name.toLowerCase());
+        return;
       }
       if (!d.ok){
         toast(type.kind === "stall" ? "That overlaps another stall"
@@ -739,7 +810,8 @@
         html += '<button class="ty" data-id="'+t.id+'" aria-pressed="'+(t.id===state.activeType)+'">' +
                 '<span class="sw" style="background:'+t.color+'"></span>' +
                 '<span class="nm">'+t.name+'</span>' +
-                '<span class="ct">'+(t.prefix ? t.prefix+"·" : "")+countOf(t.id)+'</span></button>';
+                '<span class="ct">'+(t.bw && t.bh ? t.bw+"×"+t.bh+" · " : "") +
+                (t.prefix ? t.prefix+"·" : "")+countOf(t.id)+'</span></button>';
       });
       html += '</div></div>';
     });
@@ -751,7 +823,13 @@
     });
   }
   function hint(){
-    var k = typeById(state.activeType).kind;
+    var t = typeById(state.activeType), k = t.kind;
+    if (fixedSize(t)){
+      $("drawHint").textContent = "Click to drop a " + t.bw + " × " + t.bh + " " + t.name.toLowerCase() +
+        ", inside an area too. Drag across to fill the space with a row or block of them. " +
+        "Edit the type to change the size.";
+      return;
+    }
     $("drawHint").textContent =
       k === "stall" ? "Drag on empty grid to make a stall — 3 across by 3 down gives a 3 × 3 stall. Stalls can sit inside an area like the food court."
     : k === "zone"  ? "Drag to block out the area, then switch to a stall type and draw the stalls inside it."
@@ -778,6 +856,10 @@
   }
 
   var dlg = $("typeDlg"), editing = null;
+  function toggleSizeRow(){
+    var isBar = $("dKind").value === "barricade";
+    $("dSizeRow").hidden = isBar; $("dSizeHint").hidden = isBar;
+  }
   function openType(t){
     editing = t;
     $("dName").value = t ? t.name : "";
@@ -785,9 +867,13 @@
     $("dPrefix").value = t ? t.prefix : "";
     $("dRate").value = t && t.rate ? t.rate : "";
     $("dColor").value = t ? t.color : "#E9A031";
+    $("dW").value = t && t.bw ? t.bw : 0;
+    $("dH").value = t && t.bh ? t.bh : 0;
     $("dDelete").hidden = !t;
+    toggleSizeRow();
     dlg.showModal();
   }
+  $("dKind").addEventListener("change", toggleSizeRow);
   $("addType").addEventListener("click", function(){ openType(null); });
   $("editType").addEventListener("click", function(){ openType(typeById(state.activeType)); });
   $("dCancel").addEventListener("click", function(){ dlg.close(); });
@@ -797,13 +883,19 @@
     var prefix = $("dPrefix").value.trim().toUpperCase();
     var rate = $("dRate").value ? Number($("dRate").value) : null;
     var color = $("dColor").value;
+    var bw = kind === "barricade" ? 0 : Math.max(0, Math.min(60, Math.round(Number($("dW").value) || 0)));
+    var bh = kind === "barricade" ? 0 : Math.max(0, Math.min(60, Math.round(Number($("dH").value) || 0)));
+    if (bw && !bh) bh = bw;
+    if (bh && !bw) bw = bh;
     if (editing){
       if (editing.kind !== kind && countOf(editing.id) > 0){
         toast("Delete its items before changing what it is"); return;
       }
-      editing.name=name; editing.kind=kind; editing.prefix=prefix; editing.rate=rate; editing.color=color;
+      editing.name=name; editing.kind=kind; editing.prefix=prefix; editing.rate=rate;
+      editing.color=color; editing.bw=bw; editing.bh=bh;
     } else {
-      var t = { id:"t"+Date.now().toString(36), name:name, kind:kind, prefix:prefix, rate:rate, color:color };
+      var t = { id:"t"+Date.now().toString(36), name:name, kind:kind, prefix:prefix, rate:rate,
+                color:color, bw:bw, bh:bh };
       state.types.push(t); state.activeType = t.id;
     }
     dlg.close(); hint(); save(); draw();
@@ -917,7 +1009,8 @@
       layout_version: new Date().toISOString().slice(0,10),
       grid: { cols: state.cols, rows: state.rows, meters_per_box: state.meters },
       types: state.types.map(function(t){
-        return { name:t.name, kind:t.kind, prefix:t.prefix, color:t.color, rate:t.rate, count: countOf(t.id) };
+        return { name:t.name, kind:t.kind, prefix:t.prefix, color:t.color, rate:t.rate,
+                 box_w: t.bw || 0, box_h: t.bh || 0, count: countOf(t.id) };
       }),
       stalls: itemsOf("stall").map(function(i){
         var t = typeById(i.type);
@@ -952,7 +1045,8 @@
         if (src && src.length){
           state.types = src.map(function(t,i){
             return { id:"t"+i, name:t.name, kind:t.kind||"stall", prefix:t.prefix||"",
-                     color:t.color||"#E9A031", rate:t.rate||null };
+                     color:t.color||"#E9A031", rate:t.rate||null,
+                     bw: t.box_w || 0, bh: t.box_h || 0 };
           });
         }
         function typeNamed(name, kind){
