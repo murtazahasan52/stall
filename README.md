@@ -10,11 +10,13 @@ Pick a type in the left panel, then drag on the grid.
 - **Stalls** — numbered and counted. Each new stall takes the next free number in
   its series (T1, T2, T3…). Types included: Regular (Y) 3 x 3, Ruby (L) 3 x 3,
   Premium (T) 6 x 6, Food stall (F) 3 x 3.
-  A type can carry its own stall size. With Regular set to 3 x 3, one click drops
-  a 3 x 3 stall, and dragging across an empty run fills it with a whole row or
-  block of 3 x 3 stalls at once. Set the size to 0 x 0 in the type to go back to
-  dragging each stall's size by hand. Add or edit a type with the buttons under
-  the list — name, what it is, prefix, rate, colour and size are all there.
+  A type carries its own sizes, one row per sub type — Premium ships with a 6 x 4
+  and an 8 x 3. When a type has more than one, its sizes appear as chips under
+  the type; click one to draw with it. One click on the grid then drops that
+  exact size, and dragging across an empty run fills it with a whole row of them.
+  Each sub type can hold its own rate. Remove every size row to go back to
+  dragging each stall by hand. Add or edit a type with the buttons under the
+  list — name, what it is, prefix, colour, facing and sizes are all there.
 - **Areas** — Food Court, Play Zone, Stage. Block out the whole area first, then
   switch to a stall type and draw stalls inside it. Stalls sit on top of an area;
   areas cannot overlap each other.
@@ -25,23 +27,26 @@ Pick a type in the left panel, then drag on the grid.
 Click anything to select it. Then:
 
 - **Move** — drag the selected item anywhere it fits.
-- **Colour** — with "Give every new stall its own colour" ticked, each stall
-  placed gets a fresh bright colour, walking the colour wheel by the golden angle
-  so neighbouring stalls never look alike. Untick it and stalls take their type's
-  colour instead. Any single stall can be recoloured in the panel, and
-  "Use type colour" clears that override. Adding a new type also starts with a
+- **Colour** — every stall in a category carries that category's colour, so the
+  map reads by type at a glance. Recolour a category in its type dialog and all
+  of its stalls follow. "One colour per category" under Layout snaps everything
+  back if single stalls were recoloured by hand. Adding a new type starts on a
   fresh bright colour rather than the same orange every time.
+  Ticking "Give every new stall its own colour instead" switches to a different
+  mode, where each new stall gets its own bright colour off the colour wheel.
 - **Facing** — each stall shows which side it opens onto as a thick bar along
   that edge, with an arrow on the larger stalls. Change it in the panel
-  (Up / Down / Left / Right) or press R to turn the selected stall. A stall type
-  carries a default facing, so a whole row stamped from one type opens the same
-  way. The JSON export records it as `"facing": "up" | "down" | "left" | "right"`.
+  (Up / Down / Left / Right) or press R to turn the selected stall. Doing either
+  also sets the facing for the stalls you draw next, so set one stall in a row to
+  Down and the whole rest of that run comes out Down until you change it again.
+  The JSON export records it as `"facing": "up" | "down" | "left" | "right"`.
 - **Selecting** — clicking a stall always selects it. Clicking an area or pathway
   selects it while that kind is the active type; with a stall type active the
   click places a stall inside the area instead.
 - **Resize** — drag the square handles on its edges and corners. A barricade has
   a handle at each end to change its length.
-- **Edit exactly** — X, Y, width and height boxes in the panel take typed values.
+- **Size** — a dropdown in the panel switches the selected stall between its
+  type's sub types. Position comes from dragging, not typed numbers.
 - **Layer** — Back / – / + / Front control the stacking order, so you can put a
   stall above its area, drop a pathway behind everything, or lift a barricade
   over a zone. The current layer number is shown above the buttons.

@@ -83,6 +83,13 @@
   .drow .dn b{display:block;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .drow .dn span{font-size:11px;color:var(--muted)}
   .empty{font-size:13px;color:var(--muted);padding:10px 2px}
+  .szrow{display:flex;gap:5px;flex-wrap:wrap;margin:3px 0 4px 10px}
+  .szrow button{padding:5px 9px;font-size:12px;border-radius:8px}
+  .szrow button[aria-pressed="true"]{background:var(--amber);border-color:var(--amber);color:#1A1205;font-weight:600}
+  .srow{display:flex;gap:5px;align-items:center;margin-bottom:6px}
+  .srow input{min-width:0;padding:6px 7px;font-size:12px}
+  .srow .sName{flex:2.2} .srow .sW,.srow .sH{flex:1} .srow .sRate{flex:1.6}
+  .srow button{flex:none;padding:6px 9px}
   .note{font-size:12px;color:var(--muted);line-height:1.55;margin:0 0 12px}
   .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--navy);
     color:var(--page);padding:10px 16px;border-radius:999px;font-size:13px;opacity:0;
@@ -132,7 +139,7 @@
         <button id="editType">Edit type</button>
       </div>
       <label class="row" style="gap:7px;margin-top:9px;font-size:12px;color:var(--muted)">
-        <input type="checkbox" id="autoColor" style="width:auto;flex:none"> Give every new stall its own colour
+        <input type="checkbox" id="autoColor" style="width:auto;flex:none"> Give every new stall its own colour instead
       </label>
       <p class="hint" id="drawHint"></p>
     </div>
@@ -160,17 +167,8 @@
           <label class="f" style="flex:none">Colour<input type="color" id="selColor"></label>
           <button class="mini" id="selColorReset" style="flex:1">Use type colour</button>
         </div>
-        <div class="row" id="rectFields" style="margin-top:8px">
-          <label class="f">X<input type="number" id="selX" min="0"></label>
-          <label class="f">Y<input type="number" id="selY" min="0"></label>
-          <label class="f">W<input type="number" id="selW" min="1"></label>
-          <label class="f">H<input type="number" id="selH" min="1"></label>
-        </div>
-        <div class="row" id="barFields" style="margin-top:8px" hidden>
-          <label class="f">X<input type="number" id="barX" min="0"></label>
-          <label class="f">Y<input type="number" id="barY" min="0"></label>
-          <label class="f">Length<input type="number" id="barLen" min="1"></label>
-          <label class="f">Run<select id="barOrient"><option value="h">Across</option><option value="v">Down</option></select></label>
+        <div class="row" id="sizeRow" style="margin-top:8px">
+          <label class="f">Size<select id="selSizeSel"></select></label>
         </div>
         <p class="hint" id="selSize"></p>
         <p class="hint" style="margin-bottom:2px">Layer <b id="zVal">30</b></p>
@@ -184,7 +182,7 @@
           <button id="dupBtn">Duplicate</button>
           <button class="danger" id="delBtn">Delete</button>
         </div>
-        <p class="hint">Drag the selected item to move it, drag its handles to resize. Arrow keys nudge, R turns the opening, Delete removes.</p>
+        <p class="hint">Drag it to move, drag its handles to resize. Arrow keys nudge, R turns the opening, Delete removes.</p>
       </div>
     </div>
 
@@ -197,6 +195,7 @@
       <h2>Layout</h2>
       <div class="btns">
         <button id="renumBtn">Renumber stalls</button>
+        <button id="flatBtn">One colour per category</button>
         <button class="danger" id="clearBtn">Clear all</button>
       </div>
     </div>
@@ -219,9 +218,10 @@
     </select>
   </label>
   <label class="f" style="margin-bottom:10px">Number prefix (stalls only)<input type="text" id="dPrefix" placeholder="Y" maxlength="4"></label>
-  <div class="row" id="dSizeRow" style="margin-bottom:6px">
-    <label class="f">Width in boxes<input type="number" id="dW" min="0" max="60" value="0"></label>
-    <label class="f">Height in boxes<input type="number" id="dH" min="0" max="60" value="0"></label>
+  <div id="dSizeWrap" style="margin-bottom:8px">
+    <p class="gh" style="margin:0 0 5px 2px">Sizes — one row per sub type</p>
+    <div id="dSizes"></div>
+    <button class="mini" id="dAddSize" style="margin-top:6px;flex:none">Add a size</button>
   </div>
   <div class="row" id="dFaceRow" style="margin-bottom:6px">
     <label class="f">Opening faces
@@ -233,7 +233,7 @@
       </select>
     </label>
   </div>
-  <p class="note" id="dSizeHint">Set 3 × 3 and every click drops a 3 × 3 stall. Drag to fill a row or block with them. Leave both 0 to drag each size by hand.</p>
+  <p class="note" id="dSizeHint">Each row is a sub type — Premium can hold a 6 × 4 and an 8 × 3, and you pick between them while drawing. One click then drops that exact size. Remove every row to drag sizes by hand.</p>
   <label class="f" style="margin-bottom:10px">Rate per stall (optional)<input type="number" id="dRate" min="0" step="500"></label>
   <label class="f" style="margin-bottom:14px;flex:none">Colour<input type="color" id="dColor" value="#E9A031"></label>
   <div class="btns">
@@ -297,18 +297,22 @@
     title:"Business Expo — Nagpur",
     cols:44, rows:30, cell:22, meters:1,
     types:[
-      {id:"t1", name:"Regular",    kind:"stall", prefix:"Y", color:"#E9A031", rate:53000, bw:3, bh:3, face:"n"},
-      {id:"t2", name:"Ruby",       kind:"stall", prefix:"L", color:"#C2476A", rate:24000, bw:3, bh:3, face:"n"},
-      {id:"t3", name:"Premium",    kind:"stall", prefix:"T", color:"#1F3B73", rate:null, bw:6, bh:6, face:"s"},
-      {id:"t4", name:"Food stall", kind:"stall", prefix:"F", color:"#B8740F", rate:null, bw:3, bh:3, face:"n"},
+      {id:"t1", name:"Regular",    kind:"stall", prefix:"Y", color:"#E9A031", rate:53000, face:"n",
+       sizes:[{name:"", w:3, h:3, rate:53000}]},
+      {id:"t2", name:"Ruby",       kind:"stall", prefix:"L", color:"#C2476A", rate:24000, face:"n",
+       sizes:[{name:"", w:3, h:3, rate:24000}]},
+      {id:"t3", name:"Premium",    kind:"stall", prefix:"T", color:"#1F3B73", rate:null, face:"s",
+       sizes:[{name:"", w:6, h:4, rate:null}, {name:"", w:8, h:3, rate:null}]},
+      {id:"t4", name:"Food stall", kind:"stall", prefix:"F", color:"#2E8B72", rate:null, face:"n",
+       sizes:[{name:"", w:3, h:3, rate:null}]},
       {id:"t5", name:"Food Court", kind:"zone",  prefix:"",  color:"#E4C9A0", rate:null},
       {id:"t6", name:"Play Zone",  kind:"zone",  prefix:"",  color:"#9FD2C4", rate:null},
       {id:"t7", name:"Stage",      kind:"zone",  prefix:"",  color:"#B3A8D6", rate:null},
       {id:"t8", name:"Walkway",    kind:"path",  prefix:"",  color:"#D8D4CC", rate:null},
       {id:"t9", name:"Barricade",  kind:"barricade", prefix:"", color:"#D9822B", rate:null}
     ],
-    activeType:"t1",
-    autoColor:true, hue:24,
+    activeType:"t1", sizeIx:0,
+    autoColor:false, hue:24,
     items:[]
   };
   var state = JSON.parse(JSON.stringify(DEFAULTS));
@@ -327,6 +331,11 @@
       var s = JSON.parse(raw);
       if (s && s.types && s.items) state = Object.assign(state, s);
       state.items.forEach(function(i){ if (typeof i.z !== "number") i.z = BASE_Z[kindOf(i)] || 30; });
+      if (!state.flatColours){          // stalls go back to one colour per category
+        state.autoColor = false;
+        state.items.forEach(function(i){ delete i.color; });
+        state.flatColours = true;
+      }
     } catch(e){}
   }
 
@@ -615,7 +624,8 @@
 
   // types with a fixed box size stamp that size instead of taking the dragged size
   function tilesFor(r, type){
-    var bw = Math.max(1, type.bw|0), bh = Math.max(1, type.bh|0), out = [];
+    var z = currentSize(type) || { w:1, h:1 };
+    var bw = Math.max(1, z.w|0), bh = Math.max(1, z.h|0), out = [];
     var acrossN = Math.max(1, Math.floor(r.w / bw)), downN = Math.max(1, Math.floor(r.h / bh));
     for (var j=0; j<downN; j++){
       for (var i=0; i<acrossN; i++){
@@ -628,7 +638,31 @@
   function freshColor(type){
     return (state.autoColor && type.kind === "stall") ? nextBrightColor() : null;
   }
-  function fixedSize(type){ return type.kind !== "barricade" && type.bw > 0 && type.bh > 0; }
+  function normalizeTypes(){
+    state.types.forEach(function(t){
+      if (!Array.isArray(t.sizes)){
+        t.sizes = (t.bw > 0 && t.bh > 0) ? [{ name:"", w:t.bw, h:t.bh, rate: t.rate || null }] : [];
+      }
+      t.sizes = t.sizes.filter(function(z){ return z && z.w > 0 && z.h > 0; });
+      if (t.kind === "barricade") t.sizes = [];
+      delete t.bw; delete t.bh;
+    });
+    if (typeof state.sizeIx !== "number") state.sizeIx = 0;
+  }
+  function sizesOf(type){ return (type && type.sizes) || []; }
+  function currentSize(type){
+    var list = sizesOf(type);
+    if (!list.length) return null;
+    return list[Math.max(0, Math.min(state.sizeIx | 0, list.length - 1))];
+  }
+  function sizeLabel(z){
+    return (z.name ? z.name + " " : "") + z.w + " × " + z.h;
+  }
+  function rateFor(type, w, h){
+    var hit = sizesOf(type).filter(function(z){ return z.w === w && z.h === h; })[0];
+    return (hit && hit.rate) || type.rate || null;
+  }
+  function fixedSize(type){ return type.kind !== "barricade" && sizesOf(type).length > 0; }
   // a plain click selects a stall, or an area/pathway while that kind is the active type;
   // clicking an area with a stall type active places a stall inside it instead
   function selectableHit(hit, type){
@@ -649,7 +683,8 @@
     if (fixedSize(type)){
       drag.tiles = tilesFor(r, type);
       drag.ok = drag.tiles.length > 0;
-      drag.previewItem = { type:type.id, x:r.x, y:r.y, w:Math.max(1,type.bw), h:Math.max(1,type.bh) };
+      var z = currentSize(type) || { w:1, h:1 };
+      drag.previewItem = { type:type.id, x:r.x, y:r.y, w:Math.max(1,z.w), h:Math.max(1,z.h) };
     } else {
       drag.previewItem = { type:type.id, x:r.x, y:r.y, w:r.w, h:r.h };
       drag.ok = fits(type.kind, r, null);
@@ -741,7 +776,8 @@
       }
       if (d.tiles){
         if (!d.tiles.length){
-          toast("No room for a " + type.bw + " × " + type.bh + " " + type.name.toLowerCase() + " there");
+          var zz = currentSize(type) || { w:1, h:1 };
+          toast("No room for a " + zz.w + " × " + zz.h + " " + type.name.toLowerCase() + " there");
           draw(); return;
         }
         var made = null;
@@ -784,7 +820,9 @@
       if (kindOf(sel) === "stall"){
         e.preventDefault();
         sel.face = FACES[(FACES.indexOf(sel.face || "n") + 1) % 4];
-        select(sel); save(); draw(); toast("Opening faces " + FACE_WORD[sel.face]);
+        typeById(sel.type).face = sel.face;
+        select(sel); save(); draw(); hint();
+        toast("Faces " + FACE_WORD[sel.face] + " — new ones follow");
       }
       return;
     }
@@ -818,15 +856,27 @@
     if (kind === "stall") $("selFace").value = item.face || "n";
     $("colorRow").hidden = isBar;
     if (!isBar) $("selColor").value = item.color || typeById(item.type).color;
+
+    var type = typeById(item.type), list = sizesOf(type);
+    $("sizeRow").hidden = isBar || !list.length;
+    if (!$("sizeRow").hidden){
+      var cur = item.w + "x" + item.h, found = false, opts2 = "";
+      list.forEach(function(z, n){
+        var key = z.w + "x" + z.h;
+        if (key === cur) found = true;
+        opts2 += '<option value="' + n + '"' + (key === cur ? " selected" : "") + '>' +
+                 esc(sizeLabel(z)) + '</option>';
+      });
+      if (!found) opts2 = '<option value="-1" selected>' + item.w + " × " + item.h + ' (custom)</option>' + opts2;
+      $("selSizeSel").innerHTML = opts2;
+    }
+
     if (isBar){
-      $("barX").value = item.x; $("barY").value = item.y;
-      $("barLen").value = item.len; $("barOrient").value = item.orient;
       $("selSize").textContent = (item.len*state.meters) + " m " + (item.orient==="h" ? "across" : "down");
     } else {
-      $("selX").value = item.x; $("selY").value = item.y;
-      $("selW").value = item.w; $("selH").value = item.h;
+      var rate = kind === "stall" ? rateFor(type, item.w, item.h) : null;
       $("selSize").textContent = item.w + " × " + item.h + " boxes = " + (item.w*state.meters) +
-        " × " + (item.h*state.meters) + " m (" + (item.w*item.h*state.meters*state.meters) + " sq m)";
+        " × " + (item.h*state.meters) + " m" + (rate ? "  ·  \u20B9" + Number(rate).toLocaleString("en-IN") : "");
     }
     $("zVal").textContent = item.z;
   }
@@ -835,38 +885,44 @@
     state.items = state.items.filter(function(i){ return i.id !== sel.id; });
     select(null); save(); draw();
   }
-  function applyField(id, key){
-    $(id).addEventListener("change", function(){
-      if (!sel) return;
-      var v = Math.round(Number(this.value));
-      var n = clone(sel); n[key] = isNaN(v) ? sel[key] : v;
-      if (!n.orient && !fits(kindOf(n), n, n.id)){ toast("That does not fit"); select(sel); return; }
-      if (n.orient){
-        n.x = Math.max(0, Math.min(state.cols, n.x)); n.y = Math.max(0, Math.min(state.rows, n.y));
-        n.len = Math.max(1, n.len);
-      }
-      sel.x=n.x; sel.y=n.y; if (n.orient) sel.len=n.len; else { sel.w=n.w; sel.h=n.h; }
-      select(sel); save(); draw();
-    });
-  }
-  applyField("selX","x"); applyField("selY","y"); applyField("selW","w"); applyField("selH","h");
-  applyField("barX","x"); applyField("barY","y"); applyField("barLen","len");
-  $("barOrient").addEventListener("change", function(){
-    if (!sel || !sel.orient) return;
-    sel.orient = this.value; select(sel); save(); draw();
+  $("selSizeSel").addEventListener("change", function(){
+    if (!sel) return;
+    var z = sizesOf(typeById(sel.type))[Number(this.value)];
+    if (!z) return;
+    var n = clone(sel); n.w = z.w; n.h = z.h;
+    if (!fits(kindOf(n), n, n.id)){ toast("No room for that size here"); select(sel); return; }
+    sel.w = z.w; sel.h = z.h; select(sel); save(); draw();
   });
   $("selLabel").addEventListener("input", function(){ if (sel){ sel.label = this.value; save(); draw(); } });
   $("selType").addEventListener("change", function(){ if (sel){ sel.type = this.value; save(); draw(); } });
-  $("selFace").addEventListener("change", function(){ if (sel){ sel.face = this.value; save(); draw(); } });
+  $("selFace").addEventListener("change", function(){
+    if (!sel) return;
+    sel.face = this.value;
+    typeById(sel.type).face = this.value;   // the next stalls of this type follow it
+    save(); draw(); hint();
+    toast("New " + typeById(sel.type).name.toLowerCase() + " stalls will face " + FACE_WORD[this.value]);
+  });
   $("selColor").addEventListener("input", function(){ if (sel){ sel.color = this.value; save(); draw(); } });
   $("selColorReset").addEventListener("click", function(){
     if (!sel) return;
     delete sel.color; select(sel); save(); draw(); toast("Back to the type colour");
   });
   $("autoColor").addEventListener("change", function(){
-    state.autoColor = this.checked; save();
-    toast(this.checked ? "New stalls will each get their own colour"
-                       : "New stalls will use their type colour");
+    state.autoColor = this.checked;
+    if (!this.checked) clearStallColours(true);
+    else toast("New stalls will each get their own colour");
+    save(); draw();
+  });
+  function clearStallColours(quiet){
+    var n = 0;
+    state.items.forEach(function(i){ if (i.color){ delete i.color; n++; } });
+    if (sel) select(sel);
+    save(); draw();
+    toast(n ? "All stalls back to their category colour" : "Stalls already match their category");
+    return n;
+  }
+  $("flatBtn").addEventListener("click", function(){
+    state.autoColor = false; $("autoColor").checked = false; clearStallColours();
   });
   $("delBtn").addEventListener("click", removeSel);
   $("dupBtn").addEventListener("click", function(){
@@ -914,27 +970,42 @@
       if (!list.length) return;
       html += '<div class="group"><p class="gh">'+KINDS[kind]+'</p><div class="types">';
       list.forEach(function(t){
-        html += '<button class="ty" data-id="'+t.id+'" aria-pressed="'+(t.id===state.activeType)+'">' +
+        var zs = sizesOf(t), cur = currentSize(t), active = (t.id === state.activeType);
+        html += '<button class="ty" data-id="'+t.id+'" aria-pressed="'+active+'">' +
                 '<span class="sw" style="background:'+t.color+'"></span>' +
-                '<span class="nm">'+t.name+'</span>' +
-                '<span class="ct">'+(t.bw && t.bh ? t.bw+"×"+t.bh+" · " : "") +
+                '<span class="nm">'+esc(t.name)+'</span>' +
+                '<span class="ct">'+(zs.length === 1 ? zs[0].w+"×"+zs[0].h+" · "
+                                   : zs.length > 1 ? zs.length+" sizes · " : "") +
                 (t.prefix ? t.prefix+"·" : "")+countOf(t.id)+'</span></button>';
+        if (active && zs.length > 1){
+          html += '<div class="szrow">' + zs.map(function(z, n){
+            return '<button data-ix="'+n+'" aria-pressed="'+(cur === z)+'">'+esc(sizeLabel(z))+'</button>';
+          }).join("") + '</div>';
+        }
       });
       html += '</div></div>';
     });
     $("typeGroups").innerHTML = html;
     Array.prototype.forEach.call($("typeGroups").querySelectorAll(".ty"), function(btn){
       btn.addEventListener("click", function(){
+        if (state.activeType !== btn.dataset.id) state.sizeIx = 0;
         state.activeType = btn.dataset.id; renderTypes(); hint(); save();
+      });
+    });
+    Array.prototype.forEach.call($("typeGroups").querySelectorAll(".szrow button"), function(btn){
+      btn.addEventListener("click", function(){
+        state.sizeIx = Number(btn.dataset.ix) || 0; renderTypes(); hint(); save();
       });
     });
   }
   function hint(){
     var t = typeById(state.activeType), k = t.kind;
     if (fixedSize(t)){
-      $("drawHint").textContent = "Click to drop a " + t.bw + " × " + t.bh + " " + t.name.toLowerCase() +
-        ", inside an area too. Drag across to fill the space with a row or block of them. " +
-        "Edit the type to change the size.";
+      var z = currentSize(t);
+      $("drawHint").textContent = "Click to drop a " + z.w + " × " + z.h + " " + t.name.toLowerCase() +
+        (t.kind === "stall" ? " facing " + FACE_WORD[t.face || "n"] : "") +
+        ". Drag across to fill the space with a row of them." +
+        (sizesOf(t).length > 1 ? " Pick another size above." : "");
       return;
     }
     $("drawHint").textContent =
@@ -943,12 +1014,26 @@
     : k === "path"  ? "Drag along the aisle — a long thin strip works best."
     :                 "Drag along the line you want fenced. Sideways makes a horizontal barricade, downward a vertical one.";
   }
+  function dimGroups(typeId){
+    var g = {}, order = [];
+    state.items.forEach(function(i){
+      if (i.type !== typeId || i.orient) return;
+      var k = i.w + " × " + i.h;
+      if (!(k in g)){ g[k] = 0; order.push(k); }
+      g[k]++;
+    });
+    return order.map(function(k){ return { key:k, n:g[k] }; });
+  }
   function renderStats(){
     var html = "", total = 0;
     state.types.filter(function(t){ return t.kind==="stall"; }).forEach(function(t){
       var n = countOf(t.id); if (!n) return;
       total += n;
-      html += '<div><span>'+t.name+(t.prefix?" ("+t.prefix+")":"")+'</span><span>'+n+'</span></div>';
+      html += '<div><span>'+esc(t.name)+(t.prefix?" ("+t.prefix+")":"")+'</span><span>'+n+'</span></div>';
+      var gs = dimGroups(t.id);
+      if (gs.length > 1) gs.forEach(function(g){
+        html += '<div class="sub"><span>'+g.key+'</span><span>'+g.n+'</span></div>';
+      });
     });
     html += '<div class="tot"><span>Total stalls</span><span>'+total+'</span></div>';
     var extras = "";
@@ -965,10 +1050,40 @@
   var dlg = $("typeDlg"), editing = null;
   function toggleSizeRow(){
     var kind = $("dKind").value;
-    $("dSizeRow").hidden = (kind === "barricade");
+    $("dSizeWrap").hidden = (kind === "barricade");
     $("dSizeHint").hidden = (kind === "barricade");
     $("dFaceRow").hidden = (kind !== "stall");
   }
+  function sizeRowHtml(z){
+    return '<div class="srow">' +
+      '<input type="text" class="sName" placeholder="sub type" value="' + esc(z.name || "") + '">' +
+      '<input type="number" class="sW" min="1" max="60" placeholder="W" value="' + (z.w || "") + '">' +
+      '<input type="number" class="sH" min="1" max="60" placeholder="H" value="' + (z.h || "") + '">' +
+      '<input type="number" class="sRate" min="0" step="500" placeholder="rate" value="' + (z.rate || "") + '">' +
+      '<button class="mini sDel" title="Remove">&#215;</button></div>';
+  }
+  function renderSizeRows(list){
+    $("dSizes").innerHTML = (list.length ? list : [{name:"", w:"", h:"", rate:""}])
+      .map(sizeRowHtml).join("");
+    Array.prototype.forEach.call($("dSizes").querySelectorAll(".sDel"), function(b){
+      b.addEventListener("click", function(){
+        b.parentNode.parentNode.removeChild(b.parentNode);
+        if (!$("dSizes").children.length) renderSizeRows([]);
+      });
+    });
+  }
+  function collectSizes(){
+    return Array.prototype.map.call($("dSizes").children, function(row){
+      var w = Math.round(Number(row.querySelector(".sW").value) || 0);
+      var h = Math.round(Number(row.querySelector(".sH").value) || 0);
+      var rate = Number(row.querySelector(".sRate").value) || null;
+      return { name: row.querySelector(".sName").value.trim(), w:w, h:h, rate:rate };
+    }).filter(function(z){ return z.w > 0 && z.h > 0; });
+  }
+  $("dAddSize").addEventListener("click", function(){
+    var list = collectSizes(); list.push({ name:"", w:"", h:"", rate:"" });
+    renderSizeRows(list);
+  });
   function openType(t){
     editing = t;
     $("dName").value = t ? t.name : "";
@@ -977,8 +1092,7 @@
     $("dRate").value = t && t.rate ? t.rate : "";
     $("dColor").value = t ? t.color : nextBrightColor();
     $("dFace").value = (t && t.face) || "n";
-    $("dW").value = t && t.bw ? t.bw : 0;
-    $("dH").value = t && t.bh ? t.bh : 0;
+    renderSizeRows(t ? sizesOf(t).slice() : [{ name:"", w:3, h:3, rate:"" }]);
     $("dDelete").hidden = !t;
     toggleSizeRow();
     dlg.showModal();
@@ -993,23 +1107,20 @@
     var prefix = $("dPrefix").value.trim().toUpperCase();
     var rate = $("dRate").value ? Number($("dRate").value) : null;
     var color = $("dColor").value;
-    var bw = kind === "barricade" ? 0 : Math.max(0, Math.min(60, Math.round(Number($("dW").value) || 0)));
-    var bh = kind === "barricade" ? 0 : Math.max(0, Math.min(60, Math.round(Number($("dH").value) || 0)));
-    if (bw && !bh) bh = bw;
-    if (bh && !bw) bw = bh;
+    var sizes = kind === "barricade" ? [] : collectSizes();
     var face = kind === "stall" ? $("dFace").value : "n";
     if (editing){
       if (editing.kind !== kind && countOf(editing.id) > 0){
         toast("Delete its items before changing what it is"); return;
       }
       editing.name=name; editing.kind=kind; editing.prefix=prefix; editing.rate=rate;
-      editing.color=color; editing.bw=bw; editing.bh=bh; editing.face=face;
+      editing.color=color; editing.sizes=sizes; editing.face=face;
     } else {
       var t = { id:"t"+Date.now().toString(36), name:name, kind:kind, prefix:prefix, rate:rate,
-                color:color, bw:bw, bh:bh, face:face };
+                color:color, sizes:sizes, face:face };
       state.types.push(t); state.activeType = t.id;
     }
-    dlg.close(); hint(); save(); draw();
+    state.sizeIx = 0; dlg.close(); hint(); save(); draw();
   });
   $("dDelete").addEventListener("click", function(){
     if (!editing) return;
@@ -1017,7 +1128,7 @@
     if (state.types.length < 2){ toast("Keep at least one type"); return; }
     state.types = state.types.filter(function(t){ return t.id !== editing.id; });
     state.activeType = state.types[0].id;
-    dlg.close(); hint(); save(); draw();
+    state.sizeIx = 0; dlg.close(); hint(); save(); draw();
   });
 
   /* ---------- grid controls ---------- */
@@ -1061,7 +1172,21 @@
     scale = scale || 1;
     var cs = 28*scale, pad = 26*scale;
     var gridW = state.cols*cs, gridH = state.rows*cs;
-    var used = state.types.filter(function(t){ return countOf(t.id) > 0; });
+    var used = [];
+    state.types.forEach(function(t){
+      var n = countOf(t.id); if (!n) return;
+      var gs = (t.kind === "stall") ? dimGroups(t.id) : [];
+      if (gs.length > 1){
+        gs.forEach(function(g){
+          var dims = g.key.split(" × ");
+          var rate = rateFor(t, Number(dims[0]), Number(dims[1]));
+          used.push({ type:t, label: t.name + " " + g.key, count: g.n, rate: rate });
+        });
+      } else {
+        used.push({ type:t, label: t.name, count: n,
+                    rate: t.kind === "stall" ? (sizesOf(t)[0] && sizesOf(t)[0].rate) || t.rate : null });
+      }
+    });
     var rows = Math.ceil(used.length/3);
     var titleH = 48*scale, legendH = rows*26*scale + 16*scale;
     var W = gridW + pad*2, H = titleH + gridH + legendH + pad*2;
@@ -1081,7 +1206,8 @@
     g.save(); g.translate(pad, pad + titleH); paint(g, cs, {noSel:true}); g.restore();
 
     var ly = pad + titleH + gridH + 22*scale;
-    used.forEach(function(t, i){
+    used.forEach(function(entry, i){
+      var t = entry.type;
       var col = i%3, row = Math.floor(i/3);
       var x = pad + col*(gridW/3), y = ly + row*26*scale;
       var samples = state.items.filter(function(i){ return i.type === t.id && i.color; })
@@ -1099,8 +1225,8 @@
       g.strokeRect(x+.5, y-10*scale+.5, 13*scale-1, 13*scale-1);
       g.fillStyle = "#070F21";
       g.font = (13*scale) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
-      var txt = t.name + " — " + countOf(t.id) + (t.kind==="stall" ? " stalls" : "");
-      if (t.rate) txt += " · \u20B9" + Number(t.rate).toLocaleString("en-IN");
+      var txt = entry.label + " — " + entry.count + (t.kind==="stall" ? " stalls" : "");
+      if (entry.rate) txt += " · \u20B9" + Number(entry.rate).toLocaleString("en-IN");
       g.fillText(txt, x + 19*scale, y + scale);
     });
     return c;
@@ -1131,13 +1257,16 @@
       grid: { cols: state.cols, rows: state.rows, meters_per_box: state.meters },
       types: state.types.map(function(t){
         return { name:t.name, kind:t.kind, prefix:t.prefix, color:t.color, rate:t.rate,
-                 box_w: t.bw || 0, box_h: t.bh || 0, faces_word: FACE_WORD[t.face || "n"],
-                 count: countOf(t.id) };
+                 sizes: sizesOf(t).map(function(z){
+                   return { name:z.name || "", w:z.w, h:z.h, rate:z.rate || null };
+                 }),
+                 faces_word: FACE_WORD[t.face || "n"], count: countOf(t.id) };
       }),
       stalls: itemsOf("stall").map(function(i){
         var t = typeById(i.type);
         return { stall:i.label, category:t.name, prefix:t.prefix, x:i.x, y:i.y, w:i.w, h:i.h, z:i.z,
                  facing: FACE_WORD[i.face || "n"], color: i.color || typeById(i.type).color,
+                 rate: rateFor(t, i.w, i.h),
                  size_m: (i.w*state.meters)+"x"+(i.h*state.meters) };
       }),
       areas: itemsOf("zone").map(function(i){
@@ -1169,7 +1298,9 @@
           state.types = src.map(function(t,i){
             return { id:"t"+i, name:t.name, kind:t.kind||"stall", prefix:t.prefix||"",
                      color:t.color||"#E9A031", rate:t.rate||null,
-                     bw: t.box_w || 0, bh: t.box_h || 0, face: WORD_FACE[t.faces_word] || "n" };
+                     sizes: Array.isArray(t.sizes) ? t.sizes
+                          : (t.box_w > 0 ? [{ name:"", w:t.box_w, h:t.box_h, rate:t.rate||null }] : []),
+                     face: WORD_FACE[t.faces_word] || "n" };
           });
         }
         function typeNamed(name, kind){
@@ -1197,7 +1328,8 @@
           state.items.push({ id:uid(), type: typeNamed("Barricade","barricade").id, orient:b.orient,
                              x:b.x, y:b.y, len:b.length, z: b.z || BASE_Z.barricade, label:"Barricade" });
         });
-        state.activeType = state.types[0].id;
+        state.activeType = state.types[0].id; state.sizeIx = 0;
+        normalizeTypes();
         $("title").value = state.title; $("cols").value = state.cols;
         $("rows").value = state.rows; $("meters").value = state.meters;
         select(null); hint(); save(); draw();
@@ -1441,6 +1573,7 @@
   doc.id = state.docId || null; doc.name = state.docName || "";
   $("autoColor").checked = state.autoColor !== false;
   auto.on = state.autoSave !== false;
+  normalizeTypes();
   showDoc(); hint(); renderTypes(); draw();
   refreshStatus();
 })();
