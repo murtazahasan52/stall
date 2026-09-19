@@ -99,6 +99,20 @@ needs and they stop at the smallest size that still holds every item, and say so
 Set "1 box =" to the real metre value and every item shows its true size.
 Work is kept in the browser, so a refresh does not lose the layout.
 
+## PNG and PDF output
+
+Both exports crop to what you have actually drawn — the empty part of a 140 x 100
+board is not included — and then scale the plan up to about 3600 px wide, so the
+stalls fill the sheet instead of sitting tiny in a corner.
+
+The printed version drops the working grid and draws every stall as a rounded
+colour tile with a large bold number, the way a published floor plan looks.
+Areas, pathways and barricades keep their own styling, and a legend underneath
+lists each type with its count and rate.
+
+The PDF page is shaped like the plan itself, long side 420 mm (A3), so a wide
+layout fills a wide page rather than sitting in a band across A4.
+
 ## Saving designs on the server
 
 The app keeps a working copy in the browser, and can also store named designs on

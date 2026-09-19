@@ -488,10 +488,19 @@
       labelBlock(g, it, cs, false);
     } else if (kind !== "barricade"){
       var px=it.x*cs, py=it.y*cs, pw=it.w*cs, ph=it.h*cs, fill = fillOf(it, t);
-      g.fillStyle = fill; g.globalAlpha = .92;
-      g.fillRect(px+1, py+1, pw-2, ph-2); g.globalAlpha = 1;
-      g.strokeStyle = "rgba(7,15,33,.55)"; g.lineWidth = 1.2;
-      g.strokeRect(px+1.5, py+1.5, pw-3, ph-3);
+      if (EXPORT){
+        // exactly the cells it occupies — spacing on the sheet matches the layout
+        var lw = Math.max(1, cs*0.035);
+        g.fillStyle = fill;
+        g.fillRect(px, py, pw, ph);
+        g.strokeStyle = "rgba(7,15,33,.5)"; g.lineWidth = lw;
+        g.strokeRect(px + lw/2, py + lw/2, pw - lw, ph - lw);
+      } else {
+        g.fillStyle = fill; g.globalAlpha = .92;
+        g.fillRect(px+1, py+1, pw-2, ph-2); g.globalAlpha = 1;
+        g.strokeStyle = "rgba(7,15,33,.55)"; g.lineWidth = 1.2;
+        g.strokeRect(px+1.5, py+1.5, pw-3, ph-3);
+      }
       drawFace(g, it, px, py, pw, ph, textColor(fill));
       if (!(pw > 0) || !(ph > 0)){          // nothing is ever drawn as empty space
         g.strokeStyle = "#C0392B"; g.lineWidth = 2; g.setLineDash([4,3]);
@@ -499,9 +508,10 @@
         g.setLineDash([]);
       }
       if (it.id !== editingId){
-        var size = Math.min(Math.max(8, Math.min(pw,ph)*0.34), ph*0.5, pw*0.42);
+        var grow = EXPORT ? 0.46 : 0.34;
+        var size = Math.min(Math.max(8, Math.min(pw,ph)*grow), ph*0.55, pw*0.46);
         g.fillStyle = textColor(fill);
-        g.font = "600 " + size.toFixed(1) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
+        g.font = (EXPORT ? "800 " : "600 ") + size.toFixed(1) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
         g.textAlign = "center"; g.textBaseline = "middle";
         g.fillText(it.label || "", px+pw/2, py+ph/2);
       }
@@ -567,6 +577,11 @@
   function paintScene(g, cs){
     var W = state.cols*cs, H = state.rows*cs, x, y;
     g.fillStyle = "#FFFFFF"; g.fillRect(0,0,W,H);
+    if (EXPORT){                    // a printed plan has no working grid on it
+      byZ().forEach(function(it){ try { drawItem(g, it, cs); } catch(e){} });
+      return;
+    }
+
     // two batched paths instead of one stroke per line — matters on a 140 x 100 board
     g.lineWidth = 1;
     g.beginPath();
@@ -689,6 +704,18 @@
   function paint(g, cs){ paintScene(g, cs); }
 
   var curDPR = DPR, rafId = 0;
+  var EXPORT = false;              // true while the PNG / PDF sheet is being drawn
+
+  function roundRect(g, x, y, w, h, r){
+    r = Math.max(0, Math.min(r, w/2, h/2));
+    g.beginPath();
+    g.moveTo(x+r, y);
+    g.lineTo(x+w-r, y); g.quadraticCurveTo(x+w, y, x+w, y+r);
+    g.lineTo(x+w, y+h-r); g.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+    g.lineTo(x+r, y+h); g.quadraticCurveTo(x, y+h, x, y+h-r);
+    g.lineTo(x, y+r); g.quadraticCurveTo(x, y, x+r, y);
+    g.closePath();
+  }
 
   // one canvas, painted whole every time — no cached layer that can go stale
   function render(withStats){
@@ -1738,69 +1765,109 @@
   });
 
   /* ---------- export ---------- */
-  function buildExport(scale){
-    scale = scale || 1;
-    var cs = 28*scale, pad = 26*scale;
-    var gridW = state.cols*cs, gridH = state.rows*cs;
+  // the plan is cropped to what is actually drawn, then scaled up to print size
+  function contentBounds(){
+    if (!state.items.length) return { x:0, y:0, w: Math.min(state.cols, 40), h: Math.min(state.rows, 24) };
+    var x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    state.items.forEach(function(it){
+      var b = boxOf(it);
+      x1 = Math.min(x1, b.x); y1 = Math.min(y1, b.y);
+      x2 = Math.max(x2, b.x + Math.max(b.w, 1));
+      y2 = Math.max(y2, b.y + Math.max(b.h, 1));
+    });
+    var pad = 1;
+    x1 = Math.max(0, x1 - pad); y1 = Math.max(0, y1 - pad);
+    x2 = Math.min(state.cols, x2 + pad); y2 = Math.min(state.rows, y2 + pad);
+    return { x:x1, y:y1, w: Math.max(1, x2-x1), h: Math.max(1, y2-y1) };
+  }
+
+  function legendEntries(){
     var used = [];
     state.types.forEach(function(t){
       var n = countOf(t.id); if (!n) return;
       var gs = (t.kind === "stall") ? dimGroups(t.id) : [];
       if (gs.length > 1){
-        gs.forEach(function(g){
-          var dims = g.key.split(" × ");
-          var rate = rateFor(t, Number(dims[0]), Number(dims[1]));
-          used.push({ type:t, label: t.name + " " + g.key, count: g.n, rate: rate });
+        gs.forEach(function(gp){
+          var dims = gp.key.split(" × ");
+          used.push({ type:t, label: t.name + " " + gp.key, count: gp.n,
+                      rate: rateFor(t, Number(dims[0]), Number(dims[1])) });
         });
       } else {
         used.push({ type:t, label: t.name, count: n,
                     rate: t.kind === "stall" ? (sizesOf(t)[0] && sizesOf(t)[0].rate) || t.rate : null });
       }
     });
-    var rows = Math.ceil(used.length/3);
-    var titleH = 48*scale, legendH = rows*26*scale + 16*scale;
-    var W = gridW + pad*2, H = titleH + gridH + legendH + pad*2;
+    return used;
+  }
 
+  // targetW is the width in pixels of the finished sheet
+  function buildExport(targetW){
+    targetW = targetW || 3600;
+    var b = contentBounds();
+    var cs = Math.max(24, Math.min(120, Math.round(targetW / b.w)));
+    var planW = b.w*cs, planH = b.h*cs;
+    var pad = Math.round(cs*0.9);
+    var titleH = Math.round(cs*2.2);
+
+    var used = legendEntries();
+    var cols = used.length > 8 ? 4 : 3;
+    var rowH = Math.round(cs*0.9), legendRows = Math.ceil(used.length/cols);
+    var legendH = used.length ? legendRows*rowH + rowH : 0;
+
+    var W = planW + pad*2, H = titleH + planH + legendH + pad*2;
     var c = document.createElement("canvas");
     c.width = Math.round(W); c.height = Math.round(H);
     var g = c.getContext("2d");
-    g.fillStyle = "#FFFDF9"; g.fillRect(0,0,W,H);
-    g.fillStyle = "#070F21"; g.textAlign = "left"; g.textBaseline = "alphabetic";
-    g.font = "700 " + (22*scale) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
-    g.fillText(state.title || "Stall layout", pad, pad + 22*scale);
-    g.fillStyle = "rgba(7,15,33,.6)";
-    g.font = (12*scale) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
-    g.fillText(itemsOf("stall").length + " stalls · " + itemsOf("zone").length + " areas · grid " +
-               state.cols + " × " + state.rows + " · 1 box = " + state.meters + " m",
-               pad, pad + 40*scale);
-    g.save(); g.translate(pad, pad + titleH); paintScene(g, cs); g.restore();
 
-    var ly = pad + titleH + gridH + 22*scale;
-    used.forEach(function(entry, i){
-      var t = entry.type;
-      var col = i%3, row = Math.floor(i/3);
-      var x = pad + col*(gridW/3), y = ly + row*26*scale;
-      var samples = state.items.filter(function(i){ return i.type === t.id && i.color; })
-                               .slice(0, 3).map(function(i){ return i.color; });
-      if (samples.length > 1){
-        samples.forEach(function(col, n){
-          g.fillStyle = col;
-          g.fillRect(x + n*(13*scale/samples.length), y-10*scale, 13*scale/samples.length, 13*scale);
-        });
-      } else {
-        g.fillStyle = samples[0] || t.color;
-        g.fillRect(x, y-10*scale, 13*scale, 13*scale);
-      }
-      g.strokeStyle = "rgba(7,15,33,.35)"; g.lineWidth = 1;
-      g.strokeRect(x+.5, y-10*scale+.5, 13*scale-1, 13*scale-1);
-      g.fillStyle = "#070F21";
-      g.font = (13*scale) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
-      var txt = entry.label + " — " + entry.count + (t.kind==="stall" ? " stalls" : "");
-      if (entry.rate) txt += " · \u20B9" + Number(entry.rate).toLocaleString("en-IN");
-      g.fillText(txt, x + 19*scale, y + scale);
-    });
+    g.fillStyle = "#FFFFFF"; g.fillRect(0, 0, W, H);
+
+    var titleSize = Math.max(18, Math.round(cs*0.8));
+    g.fillStyle = "#070F21"; g.textAlign = "left"; g.textBaseline = "alphabetic";
+    g.font = "800 " + titleSize + "px 'Segoe UI', Roboto, system-ui, sans-serif";
+    g.fillText(state.title || "Stall layout", pad, pad + titleSize);
+    g.fillStyle = "rgba(7,15,33,.55)";
+    g.font = Math.max(11, Math.round(cs*0.38)) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
+    g.fillText(itemsOf("stall").length + " stalls \u00B7 " + itemsOf("zone").length + " areas \u00B7 1 box = " +
+               state.meters + " m", pad, pad + titleSize + Math.round(cs*0.5));
+
+    EXPORT = true;
+    g.save();
+    g.beginPath(); g.rect(pad, pad + titleH, planW, planH); g.clip();
+    g.translate(pad - b.x*cs, pad + titleH - b.y*cs);
+    try { paintScene(g, cs); } catch(e){}
+    g.restore();
+    EXPORT = false;
+
+    if (used.length){
+      var ly = pad + titleH + planH + rowH;
+      var swatch = Math.round(cs*0.5);
+      used.forEach(function(entry, i){
+        var t = entry.type;
+        var col = i % cols, row = Math.floor(i/cols);
+        var x = pad + col*(planW/cols), y = ly + row*rowH;
+        var samples = state.items.filter(function(i2){ return i2.type === t.id && okColor(i2.color); })
+                                 .slice(0, 3).map(function(i2){ return i2.color; });
+        if (samples.length > 1){
+          samples.forEach(function(colr, n){
+            g.fillStyle = colr;
+            g.fillRect(x + n*(swatch/samples.length), y - swatch*0.8, swatch/samples.length, swatch);
+          });
+        } else {
+          g.fillStyle = samples[0] || fillOf(null, t);
+          g.fillRect(x, y - swatch*0.8, swatch, swatch);
+        }
+        g.strokeStyle = "rgba(7,15,33,.35)"; g.lineWidth = 1;
+        g.strokeRect(x+.5, y - swatch*0.8 + .5, swatch-1, swatch-1);
+        g.fillStyle = "#070F21";
+        g.font = "600 " + Math.max(12, Math.round(cs*0.4)) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
+        var txt = entry.label + " \u2014 " + entry.count + (t.kind === "stall" ? " stalls" : "");
+        if (entry.rate) txt += " \u00B7 \u20B9" + Number(entry.rate).toLocaleString("en-IN");
+        g.fillText(txt, x + swatch*1.35, y);
+      });
+    }
     return c;
   }
+
   function download(href, name){
     var a = document.createElement("a");
     a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove();
@@ -1809,16 +1876,26 @@
     return (state.title||"stall-layout").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"") || "stall-layout";
   }
   $("pngBtn").addEventListener("click", function(){
-    download(buildExport(2).toDataURL("image/png"), slug()+".png"); toast("PNG saved");
+    var c = buildExport(3600);
+    download(c.toDataURL("image/png"), slug()+".png");
+    toast("PNG saved — " + c.width + " \u00D7 " + c.height + " px");
   });
   $("pdfBtn").addEventListener("click", function(){
     if (!window.jspdf || !window.jspdf.jsPDF){ toast("PDF library did not load — check your connection"); return; }
-    var c = buildExport(2), landscape = c.width >= c.height;
-    var pdf = new window.jspdf.jsPDF({ orientation: landscape?"landscape":"portrait", unit:"mm", format:"a4" });
-    var pw = pdf.internal.pageSize.getWidth(), ph = pdf.internal.pageSize.getHeight(), m = 8;
-    var s = Math.min((pw-m*2)/c.width, (ph-m*2)/c.height);
-    pdf.addImage(c.toDataURL("image/jpeg", .94), "JPEG", (pw-c.width*s)/2, (ph-c.height*s)/2, c.width*s, c.height*s);
-    pdf.save(slug()+".pdf"); toast("PDF saved");
+    var c = buildExport(3600);
+    // page shaped like the plan, long side 420 mm (A3), so nothing is wasted
+    var ratio = c.height / c.width, longSide = 420, shortSide = Math.round(longSide * ratio);
+    var fmt = (c.width >= c.height) ? [longSide, Math.max(120, shortSide)]
+                                    : [Math.max(120, Math.round(longSide / ratio)), longSide];
+    var pdf = new window.jspdf.jsPDF({
+      orientation: (c.width >= c.height) ? "landscape" : "portrait", unit: "mm", format: fmt
+    });
+    var pw = pdf.internal.pageSize.getWidth(), ph = pdf.internal.pageSize.getHeight(), m = 6;
+    var sc = Math.min((pw-m*2)/c.width, (ph-m*2)/c.height);
+    pdf.addImage(c.toDataURL("image/jpeg", .95), "JPEG",
+                 (pw-c.width*sc)/2, (ph-c.height*sc)/2, c.width*sc, c.height*sc);
+    pdf.save(slug()+".pdf");
+    toast("PDF saved — " + Math.round(pw) + " \u00D7 " + Math.round(ph) + " mm");
   });
   function exportObject(){
     return {
