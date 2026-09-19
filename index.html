@@ -508,12 +508,23 @@
         g.setLineDash([]);
       }
       if (it.id !== editingId){
-        var grow = EXPORT ? 0.46 : 0.34;
-        var size = Math.min(Math.max(8, Math.min(pw,ph)*grow), ph*0.55, pw*0.46);
+        var txt = it.label || "";
+        var weight = EXPORT ? "800 " : "600 ";
+        var grow = EXPORT ? 0.5 : 0.34;
+        var size = Math.min(Math.max(8, Math.min(pw, ph)*grow), ph*0.6);
+        var room = pw * 0.88;
+        g.font = weight + size.toFixed(1) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
+        var tw = g.measureText(txt).width;
+        if (tw > room){                       // long numbers never spill onto the next stall
+          size = Math.max(6, size * room / tw);
+          g.font = weight + size.toFixed(1) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
+        }
+        g.save();
+        g.beginPath(); g.rect(px, py, pw, ph); g.clip();
         g.fillStyle = textColor(fill);
-        g.font = (EXPORT ? "800 " : "600 ") + size.toFixed(1) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
         g.textAlign = "center"; g.textBaseline = "middle";
-        g.fillText(it.label || "", px+pw/2, py+ph/2);
+        g.fillText(txt, px + pw/2, py + ph/2);
+        g.restore();
       }
     } else {
       var r = barRect(it, cs);
@@ -549,7 +560,7 @@
     else g.fillRect(px+pw-2-th, py+2, th, ph-4);
 
     var a = Math.min(pw, ph) * 0.12, cx = px+pw/2, cy = py+ph/2;
-    if (Math.min(pw, ph) > 46){
+    if (!EXPORT && Math.min(pw, ph) > 46){
       g.globalAlpha = .9; g.beginPath();
       if (face === "n"){ g.moveTo(cx, py+th+3); g.lineTo(cx-a, py+th+3+a); g.lineTo(cx+a, py+th+3+a); }
       else if (face === "s"){ g.moveTo(cx, py+ph-th-3); g.lineTo(cx-a, py+ph-th-3-a); g.lineTo(cx+a, py+ph-th-3-a); }
@@ -565,8 +576,15 @@
     var vertical = it.h > it.w * 1.6;
     var size = Math.min(Math.max(9, cs*0.62), (vertical ? it.w : it.h)*cs*0.5);
     g.save();
+    g.beginPath(); g.rect(it.x*cs, it.y*cs, it.w*cs, it.h*cs); g.clip();
     g.fillStyle = faint ? "rgba(7,15,33,.45)" : "rgba(7,15,33,.78)";
     g.font = "700 " + size.toFixed(1) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
+    var room2 = (vertical ? it.h : it.w) * cs * 0.9;
+    var tw2 = g.measureText(it.label || t.name).width;
+    if (tw2 > room2){
+      size = Math.max(7, size * room2 / tw2);
+      g.font = "700 " + size.toFixed(1) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
+    }
     g.textAlign = "center"; g.textBaseline = "middle";
     var cx = (it.x + it.w/2)*cs, cy = (it.y + it.h/2)*cs;
     if (vertical){ g.translate(cx, cy); g.rotate(-Math.PI/2); g.fillText(it.label || t.name, 0, 0); }
@@ -1802,16 +1820,16 @@
 
   // targetW is the width in pixels of the finished sheet
   function buildExport(targetW){
-    targetW = targetW || 3600;
+    targetW = targetW || 4400;
     var b = contentBounds();
-    var cs = Math.max(24, Math.min(120, Math.round(targetW / b.w)));
+    var cs = Math.max(30, Math.min(150, Math.round(targetW / b.w)));
     var planW = b.w*cs, planH = b.h*cs;
     var pad = Math.round(cs*0.9);
     var titleH = Math.round(cs*2.2);
 
     var used = legendEntries();
     var cols = used.length > 8 ? 4 : 3;
-    var rowH = Math.round(cs*0.9), legendRows = Math.ceil(used.length/cols);
+    var rowH = Math.round(cs*1.05), legendRows = Math.ceil(used.length/cols);
     var legendH = used.length ? legendRows*rowH + rowH : 0;
 
     var W = planW + pad*2, H = titleH + planH + legendH + pad*2;
@@ -1821,12 +1839,12 @@
 
     g.fillStyle = "#FFFFFF"; g.fillRect(0, 0, W, H);
 
-    var titleSize = Math.max(18, Math.round(cs*0.8));
+    var titleSize = Math.max(26, Math.round(cs*0.95));
     g.fillStyle = "#070F21"; g.textAlign = "left"; g.textBaseline = "alphabetic";
     g.font = "800 " + titleSize + "px 'Segoe UI', Roboto, system-ui, sans-serif";
     g.fillText(state.title || "Stall layout", pad, pad + titleSize);
     g.fillStyle = "rgba(7,15,33,.55)";
-    g.font = Math.max(11, Math.round(cs*0.38)) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
+    g.font = Math.max(15, Math.round(cs*0.42)) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
     g.fillText(itemsOf("stall").length + " stalls \u00B7 " + itemsOf("zone").length + " areas \u00B7 1 box = " +
                state.meters + " m", pad, pad + titleSize + Math.round(cs*0.5));
 
@@ -1840,7 +1858,7 @@
 
     if (used.length){
       var ly = pad + titleH + planH + rowH;
-      var swatch = Math.round(cs*0.5);
+      var swatch = Math.round(cs*0.58);
       used.forEach(function(entry, i){
         var t = entry.type;
         var col = i % cols, row = Math.floor(i/cols);
@@ -1859,7 +1877,7 @@
         g.strokeStyle = "rgba(7,15,33,.35)"; g.lineWidth = 1;
         g.strokeRect(x+.5, y - swatch*0.8 + .5, swatch-1, swatch-1);
         g.fillStyle = "#070F21";
-        g.font = "600 " + Math.max(12, Math.round(cs*0.4)) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
+        g.font = "600 " + Math.max(16, Math.round(cs*0.46)) + "px 'Segoe UI', Roboto, system-ui, sans-serif";
         var txt = entry.label + " \u2014 " + entry.count + (t.kind === "stall" ? " stalls" : "");
         if (entry.rate) txt += " \u00B7 \u20B9" + Number(entry.rate).toLocaleString("en-IN");
         g.fillText(txt, x + swatch*1.35, y);
@@ -1876,13 +1894,13 @@
     return (state.title||"stall-layout").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"") || "stall-layout";
   }
   $("pngBtn").addEventListener("click", function(){
-    var c = buildExport(3600);
+    var c = buildExport(4400);
     download(c.toDataURL("image/png"), slug()+".png");
     toast("PNG saved — " + c.width + " \u00D7 " + c.height + " px");
   });
   $("pdfBtn").addEventListener("click", function(){
     if (!window.jspdf || !window.jspdf.jsPDF){ toast("PDF library did not load — check your connection"); return; }
-    var c = buildExport(3600);
+    var c = buildExport(4400);
     // page shaped like the plan, long side 420 mm (A3), so nothing is wasted
     var ratio = c.height / c.width, longSide = 420, shortSide = Math.round(longSide * ratio);
     var fmt = (c.width >= c.height) ? [longSide, Math.max(120, shortSide)]
