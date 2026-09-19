@@ -205,6 +205,9 @@
 
     <div class="block">
       <h2>Layout</h2>
+      <label class="row" style="gap:7px;margin-bottom:9px;font-size:12px;color:var(--muted)">
+        <input type="checkbox" id="autoNum" style="width:auto;flex:none"> Number stalls by position
+      </label>
       <div class="btns">
         <button id="undoBtn">Undo</button>
         <button id="repairBtn">Repair layout</button>
@@ -325,7 +328,7 @@
       {id:"t8", name:"Walkway",    kind:"path",  prefix:"",  color:"#D8D4CC", rate:null},
       {id:"t9", name:"Barricade",  kind:"barricade", prefix:"", color:"#D9822B", rate:null}
     ],
-    activeType:"t1", sizeIx:0, drawMode:true,
+    activeType:"t1", sizeIx:0, drawMode:true, autoNumber:true,
     autoColor:false, hue:24,
     items:[]
   };
@@ -409,9 +412,16 @@
   function nextLabel(type){
     if (type.kind !== "stall"){ var n = countOf(type.id); return n ? type.name+" "+(n+1) : type.name; }
     if (!type.prefix) return type.name;
-    var max = 0, re = new RegExp("^"+type.prefix+"(\\d+)$","i");
-    state.items.forEach(function(i){ var m = re.exec(i.label||""); if (m) max = Math.max(max, parseInt(m[1],10)); });
-    return type.prefix + (max+1);
+    // take the lowest free number in the series, so deleting one in the middle
+    // hands that number to the next stall instead of leaving a hole
+    var used = {}, re = new RegExp("^"+type.prefix+"(\\d+)$","i");
+    state.items.forEach(function(i){
+      var m = re.exec(i.label || "");
+      if (m) used[parseInt(m[1], 10)] = true;
+    });
+    var n = 1;
+    while (used[n]) n++;
+    return type.prefix + n;
   }
   function boxOf(it){
     return it.orient ? { x:it.x, y:it.y, w: it.orient==="h"?it.len:0, h: it.orient==="v"?it.len:0 }
@@ -921,7 +931,7 @@
       state.items.push(made);
       select(made, type.kind === "stall" ? "new" : false);
       drag = { mode:"tile", start:p, typeId: type.id, made:[made], moved:false };
-      save(); draw();
+      autoNumber(); save(); draw();
       return;
     }
 
@@ -965,7 +975,7 @@
       });
       if (changed){
         setPicks(drag.made);
-        save(); draw();
+        autoNumber(); save(); draw();
       }
       return;
     }
@@ -1046,7 +1056,8 @@
                       color: freshColor(type) };
           state.items.push(one); made = one;
         });
-        select(made, (d.tiles.length === 1 && type.kind === "stall") ? "new" : false); save(); draw();
+        select(made, (d.tiles.length === 1 && type.kind === "stall") ? "new" : false);
+        autoNumber(); save(); draw();
         if (d.tiles.length > 1) toast("Placed " + d.tiles.length + " × " + type.name.toLowerCase());
         return;
       }
@@ -1059,7 +1070,8 @@
       var item = { id: uid(), type: type.id, x:pi.x, y:pi.y, w:pi.w, h:pi.h,
                    z: BASE_Z[type.kind], label: nextLabel(type), face: type.face || "n",
                    color: freshColor(type) };
-      state.items.push(item); select(item, type.kind === "stall" ? "new" : false); save(); draw(); return;
+      state.items.push(item); select(item, type.kind === "stall" ? "new" : false);
+      autoNumber(); save(); draw(); return;
     }
   }
 
@@ -1084,7 +1096,7 @@
       } else if (d.made.length === 1){
         select(d.made[0], kindOf(d.made[0]) === "stall" ? "new" : false);
       }
-      save(); draw(); return;
+      autoNumber(); save(); draw(); return;
     }
 
     if (d.mode === "draw"){ commitDraw(d); return; }
@@ -1116,13 +1128,13 @@
         if (!it) return;
         it.x = n.x; it.y = n.y;
       });
-      renderSel(false); save(); draw(); return;
+      renderSel(false); autoNumber(); save(); draw(); return;
     }
 
     var n = d.previewItem;
     sel.x = n.x; sel.y = n.y;
     if (n.orient) sel.len = n.len; else { sel.w = n.w; sel.h = n.h; }
-    select(sel); save(); draw();
+    select(sel); autoNumber(); save(); draw();
   });
   cv.addEventListener("pointercancel", function(){ drag = null; overlay(); });
   cv.addEventListener("pointerleave", function(){ clearHover(); });
@@ -1168,7 +1180,7 @@
     });
     if (!all) return;
     picks.forEach(function(it, n){ it.x = next[n].x; it.y = next[n].y; });
-    renderSel(false); save(); draw();
+    renderSel(false); autoNumber(); save(); draw();
   });
 
   /* ---------- selection panel ---------- */
@@ -1286,6 +1298,11 @@
   function endEdit(){
     if (!editingId) return;
     editingId = null;
+    if (state.autoNumber && sel && inl.value !== inlWas){
+      state.autoNumber = false;
+      $("autoNum").checked = false;
+      toast("Numbering by position turned off so your number stays");
+    }
     save(); draw();
   }
   inl.addEventListener("input", function(){
@@ -1331,7 +1348,7 @@
     var ids = pickIds();
     var n = picks.length;
     state.items = state.items.filter(function(i){ return ids.indexOf(i.id) === -1; });
-    select(null); save(); draw();
+    select(null); autoNumber(); save(); draw();
     if (n > 1) toast("Deleted " + n + " items");
   }
   $("selSizeSel").addEventListener("change", function(){
@@ -1408,7 +1425,7 @@
     var copy = { id: uid(), type: sel.type, x:placed.x, y:placed.y, w:placed.w, h:placed.h,
                  z: sel.z, label: nextLabel(type), face: sel.face || type.face || "n",
                  color: freshColor(type) };
-    state.items.push(copy); select(copy); save(); draw();
+    state.items.push(copy); select(copy); autoNumber(); save(); draw();
   });
 
   // copy every selected item, shifted to the first free offset below or beside them
@@ -1442,7 +1459,7 @@
       if (kindOf(it) === "stall") copy.label = nextLabel(type);
       state.items.push(copy); made.push(copy);
     });
-    setPicks(made); save(); draw();
+    setPicks(made); autoNumber(); save(); draw();
     toast("Copied " + made.length + " items");
   }
 
@@ -1694,17 +1711,32 @@
     save(); draw();
     if (!n) toast("Everything on the layout is drawable");
   });
-  $("renumBtn").addEventListener("click", function(){
+  function renumberAll(){
     var counters = {};
-    snapshot();
     itemsOf("stall").slice().sort(function(a,b){ return a.y-b.y || a.x-b.x; }).forEach(function(it){
       var t = typeById(it.type);
       if (!t.prefix) return;
-      counters[t.prefix] = (counters[t.prefix]||0)+1;
+      counters[t.prefix] = (counters[t.prefix]||0) + 1;
       it.label = t.prefix + counters[t.prefix];
     });
-    if (sel) select(sel);
+  }
+  // keeps every series in layout order as stalls are added, removed or moved
+  function autoNumber(){
+    if (!state.autoNumber) return;
+    renumberAll();
+    if (sel){ inl.value = sel.label || ""; $("selLabel").value = sel.label || ""; }
+  }
+  $("renumBtn").addEventListener("click", function(){
+    snapshot(); renumberAll();
+    if (sel) renderSel(false);
     save(); draw(); toast("Stalls renumbered top to bottom, left to right");
+  });
+  $("autoNum").addEventListener("change", function(){
+    state.autoNumber = this.checked;
+    if (this.checked){ snapshot(); renumberAll(); if (sel) renderSel(false); }
+    save(); draw();
+    toast(this.checked ? "Numbers will follow the layout order"
+                       : "Numbers stay put — new stalls fill the gaps");
   });
   $("clearBtn").addEventListener("click", function(){
     if (!state.items.length) return;
@@ -2122,6 +2154,8 @@
   $("rows").value = state.rows; $("zoom").value = state.cell; $("meters").value = state.meters;
   doc.id = state.docId || null; doc.name = state.docName || "";
   if (typeof state.drawMode !== "boolean") state.drawMode = true;
+  if (typeof state.autoNumber !== "boolean") state.autoNumber = true;
+  $("autoNum").checked = state.autoNumber;
   cv.style.cursor = state.drawMode ? "crosshair" : "default";
   $("selectMode").setAttribute("aria-pressed", String(!state.drawMode));
   $("autoColor").checked = state.autoColor !== false;

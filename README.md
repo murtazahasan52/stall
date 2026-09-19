@@ -73,7 +73,18 @@ Click anything to select it. Then:
 - **Rename, retype, duplicate or delete** — all in the same panel. Arrow keys
   nudge the selection, Delete removes it.
 
-"Renumber stalls" renumbers every stall top to bottom, left to right within each series.
+**Number stalls by position** (on by default, checkbox under Layout) keeps every
+series in layout order by itself. Insert a stall between Y2 and Y3 and it becomes
+Y3, with the ones after it shifting up; delete one and they close up again. Moving
+a stall renumbers too, since its position is what decides the number.
+
+Typing your own number on a stall switches that off automatically, so the number
+you typed stays. With it off, numbering just fills gaps: delete Y7 and the next
+Regular stall takes Y7.
+
+"Renumber stalls" renumbers every stall top to bottom, left to right within each
+series — use it when you want the numbers to follow the layout's order rather
+than the order you drew them in.
 
 **Undo** (button, or Ctrl/Cmd+Z) steps back through the last 40 changes — placing,
 deleting, renumbering, clearing, opening a file.
